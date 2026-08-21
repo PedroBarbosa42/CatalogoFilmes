@@ -1,7 +1,7 @@
-FROM node:18-alpine
+FROM python:3.9-slim-buster
 WORKDIR /app
-COPY package*.json ./
-RUN npm install
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
-EXPOSE 8225
-CMD ["npm", "start"]
+EXPOSE 5000
+CMD ["flask", "run", "--host=0.0.0.0", "--port=5000"]

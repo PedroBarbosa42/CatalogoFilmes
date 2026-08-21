@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Entrar | Catálogo</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="auth-page">
+  <main class="auth-panel">
+    <section class="auth-intro">
+      <div><p class="site-kicker">Arquivo de cinema</p><h1>Grandes histórias, em cartaz.</h1></div>
+      <p>Explore a filmografia de Tom Hanks, salve seus favoritos e registre suas impressões.</p>
+    </section>
+    <section class="auth-form">
+    <h2>Entrar</h2>
+    <p class="auth-subtitle">Acesse seu catálogo pessoal.</p>
+    {% with messages = get_flashed_messages() %}
+      {% if messages %} <p class="flash">{{ messages[0] }}</p> {% endif %}
+    {% endwith %}
+    <form method="POST">
+        <div class="form-row"><label for="email">E-mail</label><input id="email" type="email" name="email" required></div>
+        <div class="form-row"><label for="senha">Senha</label><input id="senha" type="password" name="senha" required></div>
+        <button type="submit">Entrar</button>
+    </form>
+    <p class="auth-link">Ainda não tem conta? <a href="/register">Criar conta</a></p>
+    </section>
+  </main>
+</body>
+</html>

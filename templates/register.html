@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Criar conta | Catálogo</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="auth-page">
+  <main class="auth-panel">
+    <section class="auth-intro">
+      <div><p class="site-kicker">Arquivo de cinema</p><h1>Seu próximo filme favorito começa aqui.</h1></div>
+      <p>Monte uma coleção pessoal de momentos inesquecíveis do cinema.</p>
+    </section>
+    <section class="auth-form">
+    <h2>Criar conta</h2>
+    <p class="auth-subtitle">Leva menos de um minuto.</p>
+    {% with messages = get_flashed_messages() %}
+      {% if messages %} <p class="flash">{{ messages[0] }}</p> {% endif %}
+    {% endwith %}
+    <form method="POST">
+        <div class="form-row"><label for="nome">Nome</label><input id="nome" type="text" name="nome" required></div>
+        <div class="form-row"><label for="email">E-mail</label><input id="email" type="email" name="email" required></div>
+        <div class="form-row"><label for="senha">Senha</label><input id="senha" type="password" name="senha" required></div>
+        <button type="submit">Cadastrar</button>
+    </form>
+    <p class="auth-link">Já tem uma conta? <a href="/login">Entrar</a></p>
+    </section>
+  </main>
+</body>
+</html>

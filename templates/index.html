@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Catálogo | Tom Hanks</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="page-shell">
+        <header class="site-header">
+            <div>
+                <p class="site-kicker">Arquivo de cinema · 01</p>
+                <h1>Filmes de <span>Tom Hanks</span></h1>
+            </div>
+            <div class="user-area">
+                <span>Bem-vindo, {{ session['nome'] }}</span>
+                <a class="btn" href="/logout">Sair</a>
+            </div>
+        </header>
+    
+    {% with messages = get_flashed_messages() %}
+    {% if messages %} <p class="flash">{{ messages[0] }}</p> {% endif %}
+    {% endwith %}
+
+    <main class="movie-grid">
+        {% for movie in movies if movie.poster_path %}
+        <article class="movie-card">
+            <img class="movie-poster" src="https://image.tmdb.org/t/p/w500{{ movie.poster_path }}" alt="Pôster de {{ movie.title }}">
+            <div class="movie-content">
+            <h3 class="movie-title">{{ movie.title }}</h3>
+            <p class="movie-overview">{{ movie.overview or 'Sinopse não disponível.' }}</p>
+            
+            {% if movie.id in favoritos %}
+                <p class="favorite-label">★ Favoritado</p>
+            {% else %}
+                <form action="/favoritar" method="POST">
+                    <input type="hidden" name="movie_id" value="{{ movie.id }}">
+                    <input type="hidden" name="titulo" value="{{ movie.title }}">
+                    <input type="hidden" name="poster_path" value="{{ movie.poster_path }}">
+                    <button class="btn-favorite" type="submit">Favoritar</button>
+                </form>
+            {% endif %}
+
+            <hr class="card-divider">
+            <h4>Comentários</h4>
+            <ul class="comment-list">
+                {% for com in comentarios.get(movie.id, []) %}
+                    <li>{{ com }}</li>
+                {% endfor %}
+            </ul>
+            
+            <form class="comment-form" action="/comentar" method="POST">
+                <input type="hidden" name="movie_id" value="{{ movie.id }}">
+                <input type="text" name="texto" placeholder="Comente..." required>
+                <button type="submit">Enviar</button>
+            </form>
+            </div>
+        </article>
+        {% endfor %}
+    </main>
+    </div>
+</body>
+</html>
