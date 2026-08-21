@@ -1,0 +1,14 @@
+{
+  "name": "catalogo-tom-hanks",
+  "version": "1.0.0",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "bcrypt": "^5.1.1",
+    "express": "^4.19.2",
+    "express-session": "^1.18.0",
+    "mariadb": "^3.3.0"
+  }
+}
