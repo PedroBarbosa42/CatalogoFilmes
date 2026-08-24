@@ -20,19 +20,21 @@ def register():
     if request.method == 'POST':
         nome = request.form['nome']
         email = request.form['email']
-        senha = generate_password_hash(request.form['senha'])
-        
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        try:
-            cursor.execute("INSERT INTO usuarios (nome, email, senha_hash) VALUES (%s, %s, %s)", (nome, email, senha))
-            conn.commit()
+        senha = request.form['senha']
+
+        resposta = requests.post('http://auth_api:5001/register', json={
+            'nome': nome,
+            'email': email,
+            'senha': senha
+        })
+
+        if resposta.status_code == 201:
+            flash('Cadastro realizado! Faça seu login.', 'success')
             return redirect(url_for('login'))
-        except mysql.connector.IntegrityError:
-            flash('Email já cadastrado.')
-        finally:
-            cursor.close()
-            conn.close()
+        else:
+            erro = resposta.json().get('erro', 'Erro no cadastro')
+            flash(erro, 'danger')
+
     return render_template('register.html')
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -40,21 +42,24 @@ def login():
     if request.method == 'POST':
         email = request.form['email']
         senha = request.form['senha']
-        
-        conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT * FROM usuarios WHERE email = %s", (email,))
-        user = cursor.fetchone()
-        cursor.close()
-        conn.close()
-        
-        if user and check_password_hash(user['senha_hash'], senha):
-            session['user_id'] = user['id']
-            session['nome'] = user['nome']
-            return redirect(url_for('index'))
-        flash('Credenciais inválidas.')
-    return render_template('login.html')
 
+        resposta = requests.post('http://auth_api:5001/login', json={
+            'email': email,
+            'senha': senha
+        })
+
+        if resposta.status_code == 200:
+            dados = resposta.json()
+            session['user_id'] = dados['usuario']['id']
+            session['nome'] = dados['usuario']['nome']
+            session['user_role'] = dados['usuario']['role']
+            flash('Login realizado com sucesso!', 'success')
+            return redirect(url_for('index'))
+        else:
+            erro = resposta.json().get('erro', 'Erro ao fazer login')
+            flash(erro, 'danger')
+
+    return render_template('login.html')
 @app.route('/logout')
 def logout():
     session.clear()
