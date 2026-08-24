@@ -1,7 +1,8 @@
 version: '3.8'
+
 services:
-  app:
-    build: .
+  catalogo_web:
+    build: ./catalogo_service
     ports:
       - "8225:5000"
     environment:
@@ -11,3 +12,13 @@ services:
       - DB_PASSWORD=${DB_PASSWORD}
       - DB_NAME=${DB_NAME}
       - SECRET_KEY=${SECRET_KEY}
+    depends_on:
+      - auth_api
+
+  auth_api:
+    build: ./auth_service
+    environment:
+      - DB_HOST=${DB_HOST}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME}
