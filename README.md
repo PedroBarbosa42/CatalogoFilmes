@@ -2,7 +2,7 @@
 
 Atualização da arquitetura para a Atividade 3, implementando um serviço isolado de autenticação e comunicação via rede interna do Docker.
 
-**Professor:** 
+**Professor:** [@siriani](https://github.com/siriani)
 
 ## 🏗️ O que mudou na Arquitetura?
 
