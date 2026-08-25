@@ -50,22 +50,24 @@ networks:
     driver: bridge
 
 
-  ## 📸 Demonstração Completa do Fluxo de Recuperação de Senha
+ ## 📸 Demonstração Completa do Fluxo de Recuperação de Senha
 
 ### 1. Pedido de Recuperação
-Aqui estão as telas do pedido de redefinição de senha:
+Telas do pedido de redefinição de senha no sistema:
 ![Pedido 1](imagens/Pedido.png)
 ![Pedido 2](imagens/Pedido (2).png)
+![Esqueceu Senha 1](imagens/EsqueceuSenha.png)
+![Esqueceu Senha 2](imagens/EsqueceuSenha (2).png)
 
 ### 2. E-mail Recebido (Mailtrap)
-O e-mail simulado chegando com o link seguro e token único:
+O e-mail simulado contendo o link de redefinição:
 ![Mailtrap](imagens/MailTrap.png)
 
 ### 3. Redefinição Concluída com Sucesso
-A tela confirmando que a nova senha foi salva e o sistema aceitou o link:
+A confirmação de que a senha foi alterada com sucesso:
 ![Sucesso](imagens/Sucesso.png)
 
 ### 4. Tentativa Recusada (Token Inválido ou Expirado)
-A demonstração de segurança recusando o acesso com links incorretos ou expirados:
+A segurança bloqueando o uso de links incorretos ou expirados:
 ![Erro 1](imagens/Erro.png)
 ![Erro 2](imagens/Erro (2).png)
