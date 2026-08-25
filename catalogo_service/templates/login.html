@@ -23,6 +23,7 @@
         <div class="form-row"><label for="senha">Senha</label><input id="senha" type="password" name="senha" required></div>
         <button type="submit">Entrar</button>
     </form>
+    <p class="auth-link">Esqueceu sua senha? <a href="{{ url_for('forgot_password') }}">Clique aqui</a></p>
     <p class="auth-link">Ainda não tem conta? <a href="/register">Criar conta</a></p>
     </section>
   </main>

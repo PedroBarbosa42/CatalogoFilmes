@@ -133,5 +133,46 @@ def forgot_password():
     else:
         return jsonify({"erro": "Falha ao disparar o e-mail."}), 500
 
+@app.route('/reset-password', methods=['POST'])
+def reset_password():
+    dados = request.get_json()
+    token = dados.get('token')
+    nova_senha = dados.get('senha')
+
+    if not token or not nova_senha:
+        return jsonify({"erro": "Dados incompletos"}), 400
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        cursor.execute('''
+            SELECT * FROM reset_tokens 
+            WHERE token = %s AND usado = FALSE AND expira_em > NOW()
+        ''', (token,))
+        registro = cursor.fetchone()
+
+        if not registro:
+            cursor.close()
+            conn.close()
+            return jsonify({"erro": "Link inválido ou expirado"}), 400
+
+        senha_hash = generate_password_hash(nova_senha)
+        
+        cursor.execute('UPDATE usuarios SET senha_hash = %s WHERE id = %s', (senha_hash, registro['usuario_id']))
+        cursor.execute('UPDATE reset_tokens SET usado = TRUE WHERE token = %s', (token,))
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        return jsonify({"mensagem": "Senha redefinida com sucesso! Faça login com a nova senha."}), 200
+        
+    except Exception as e:
+        if 'conn' in locals() and conn.is_connected():
+            cursor.close()
+            conn.close()
+        return jsonify({"erro": str(e)}), 500
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5001)

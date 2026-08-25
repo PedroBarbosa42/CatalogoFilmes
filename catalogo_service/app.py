@@ -60,6 +60,23 @@ def login():
             flash(erro, 'danger')
 
     return render_template('login.html')
+
+@app.route('/forgot-password', methods=['GET', 'POST'])
+def forgot_password():
+    if request.method == 'POST':
+        email = request.form['email']
+        
+        resposta = requests.post('http://auth_api:5001/forgot-password', json={'email': email})
+        
+        if resposta.status_code == 200:
+            flash(resposta.json().get('mensagem'), 'success')
+            return redirect(url_for('login'))
+        else:
+            erro = resposta.json().get('erro', 'Erro ao processar solicitação')
+            flash(erro, 'danger')
+            
+    return render_template('forgot_password.html')
+
 @app.route('/logout')
 def logout():
     session.clear()
@@ -136,3 +153,27 @@ def comentar():
     cursor.close()
     conn.close()
     return redirect(url_for('index'))
+@app.route('/reset-password', methods=['GET', 'POST'])
+def reset_password():
+    token = request.args.get('token') or request.form.get('token')
+    
+    if not token:
+        flash('Token de recuperação não fornecido.', 'danger')
+        return redirect(url_for('login'))
+
+    if request.method == 'POST':
+        nova_senha = request.form.get('senha')
+        
+        resposta = requests.post('http://auth_api:5001/reset-password', json={
+            'token': token,
+            'senha': nova_senha
+        })
+
+        if resposta.status_code == 200:
+            flash(resposta.json().get('mensagem'), 'success')
+            return redirect(url_for('login'))
+        else:
+            erro = resposta.json().get('erro', 'Erro ao redefinir senha')
+            flash(erro, 'danger')
+
+    return render_template('reset_password.html', token=token)
