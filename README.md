@@ -69,3 +69,5 @@ A confirmação de que a senha foi alterada com sucesso:
 A segurança bloqueando o uso de links incorretos ou expirados:
 ![Erro 1](imagens/Erro.png)
 ![Erro 2](imagens/Erro%20(2).png)
+![Erro 2](imagens/Erro%20(2).png)
+
