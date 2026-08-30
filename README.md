@@ -50,7 +50,6 @@ networks:
     driver: bridge
 
 
-## 📸 Demonstração Completa do Fluxo de Recuperação de Senha
+Usuário Comum (usuario): Navega no catálogo, adiciona favoritos e possui permissão para apagar exclusivamente os próprios comentários.
 
-As capturas de tela que demonstram o funcionamento completo do fluxo de segurança (pedido de recuperação, e-mail recebido no Mailtrap, sucesso da operação e telas de erro de token inválido/expirado) estão disponíveis para consulta dentro da pasta **`imagens`** na raiz deste repositório.
-
+Administrador (admin): Herda todas as permissões básicas e ganha privilégios de moderação global (deletar comentários de qualquer pessoa), gestão de acessos (promover ou rebaixar papéis de outros usuários) e acesso ao dashboard interno de métricas.
