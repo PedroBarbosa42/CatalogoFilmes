@@ -14,11 +14,15 @@
                 <h1>Filmes de <span>Tom Hanks</span></h1>
             </div>
             <div class="user-area">
-                <span>Bem-vindo, {{ session['nome'] }}</span>
+                <span>Bem-vindo, {{ session['nome'] }}{% if session.get('user_role') == 'admin' %} (admin){% endif %}</span>
+                {% if session.get('user_role') == 'admin' %}
+                    <a class="btn" href="{{ url_for('admin_usuarios') }}">Gestão de papéis</a>
+                    <a class="btn" href="{{ url_for('admin_metricas') }}">Métricas</a>
+                {% endif %}
                 <a class="btn" href="/logout">Sair</a>
             </div>
         </header>
-    
+
     {% with messages = get_flashed_messages() %}
     {% if messages %} <p class="flash">{{ messages[0] }}</p> {% endif %}
     {% endwith %}
@@ -30,7 +34,7 @@
             <div class="movie-content">
             <h3 class="movie-title">{{ movie.title }}</h3>
             <p class="movie-overview">{{ movie.overview or 'Sinopse não disponível.' }}</p>
-            
+
             {% if movie.id in favoritos %}
                 <p class="favorite-label">★ Favoritado</p>
             {% else %}
@@ -46,10 +50,17 @@
             <h4>Comentários</h4>
             <ul class="comment-list">
                 {% for com in comentarios.get(movie.id, []) %}
-                    <li>{{ com }}</li>
+                    <li>
+                        <strong>{{ com.nome }}:</strong> {{ com.texto }}
+                        {% if com.usuario_id == session.get('user_id') or session.get('user_role') == 'admin' %}
+                            <form action="{{ url_for('deletar_comentario', comentario_id=com.id) }}" method="POST" style="display:inline;">
+                                <button type="submit" class="comment-delete-btn" title="Apagar comentário">✕</button>
+                            </form>
+                        {% endif %}
+                    </li>
                 {% endfor %}
             </ul>
-            
+
             <form class="comment-form" action="/comentar" method="POST">
                 <input type="hidden" name="movie_id" value="{{ movie.id }}">
                 <input type="text" name="texto" placeholder="Comente..." required>

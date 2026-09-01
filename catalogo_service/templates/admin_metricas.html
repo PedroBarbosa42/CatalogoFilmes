@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard de Métricas | Admin</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="page-shell">
+        <header class="site-header">
+            <div>
+                <p class="site-kicker">Painel Admin</p>
+                <h1>Dashboard de <span>Métricas</span></h1>
+            </div>
+            <div class="user-area">
+                <a class="btn" href="{{ url_for('admin_usuarios') }}">Gestão de papéis</a>
+                <a class="btn" href="{{ url_for('index') }}">Voltar ao catálogo</a>
+            </div>
+        </header>
+
+        <div class="metric-grid">
+            <div class="metric-card">
+                <span class="metric-number">{{ metricas.total_usuarios }}</span>
+                <span class="metric-label">Usuários cadastrados</span>
+            </div>
+            <div class="metric-card">
+                <span class="metric-number">{{ metricas.total_favoritos }}</span>
+                <span class="metric-label">Favoritos registrados</span>
+            </div>
+            <div class="metric-card">
+                <span class="metric-number">{{ metricas.filmes_distintos_favoritados }}</span>
+                <span class="metric-label">Filmes distintos favoritados</span>
+            </div>
+            <div class="metric-card">
+                <span class="metric-number">{{ metricas.total_comentarios }}</span>
+                <span class="metric-label">Comentários publicados</span>
+            </div>
+        </div>
+
+        <h4 class="section-title">Usuários por papel</h4>
+        <ul class="role-breakdown">
+            {% for linha in metricas.usuarios_por_papel %}
+                <li><span class="role-badge role-{{ linha.role }}">{{ linha.role }}</span> {{ linha.total }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+</body>
+</html>

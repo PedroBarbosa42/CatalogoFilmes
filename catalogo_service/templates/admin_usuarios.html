@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestão de Papéis | Admin</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="page-shell">
+        <header class="site-header">
+            <div>
+                <p class="site-kicker">Painel Admin</p>
+                <h1>Gestão de <span>Papéis</span></h1>
+            </div>
+            <div class="user-area">
+                <a class="btn" href="{{ url_for('admin_metricas') }}">Métricas</a>
+                <a class="btn" href="{{ url_for('index') }}">Voltar ao catálogo</a>
+            </div>
+        </header>
+
+        {% with messages = get_flashed_messages() %}
+        {% if messages %} <p class="flash">{{ messages[0] }}</p> {% endif %}
+        {% endwith %}
+
+        <table class="admin-table">
+            <thead>
+                <tr><th>ID</th><th>Nome</th><th>E-mail</th><th>Papel atual</th><th>Alterar</th></tr>
+            </thead>
+            <tbody>
+                {% for u in usuarios %}
+                <tr>
+                    <td>{{ u.id }}</td>
+                    <td>{{ u.nome }}</td>
+                    <td>{{ u.email }}</td>
+                    <td><span class="role-badge role-{{ u.role }}">{{ u.role }}</span></td>
+                    <td>
+                        <form action="{{ url_for('admin_alterar_role', usuario_id=u.id) }}" method="POST" class="role-form">
+                            <select name="role">
+                                <option value="usuario" {% if u.role == 'usuario' %}selected{% endif %}>usuario</option>
+                                <option value="admin" {% if u.role == 'admin' %}selected{% endif %}>admin</option>
+                            </select>
+                            <button type="submit">Salvar</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>
