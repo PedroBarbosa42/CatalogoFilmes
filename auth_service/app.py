@@ -19,9 +19,9 @@ def get_db_connection():
 
 def enviar_email_recuperacao(email_destino, token):
     link_recuperacao = f"http://localhost:8225/reset-password?token={token}"
-    
+
     corpo_email = f"""Olá,
-    
+
 Você solicitou a recuperação de senha.
 Clique no link abaixo para redefinir:
 {link_recuperacao}
@@ -29,7 +29,7 @@ Clique no link abaixo para redefinir:
 Este link expira em 30 minutos.
 Se você não solicitou, apenas ignore este e-mail.
 """
-    
+
     mensagem = MIMEText(corpo_email)
     mensagem['Subject'] = 'Recuperação de Senha - Catálogo de Filmes'
     mensagem['From'] = 'seguranca@catalogofilmes.com'
@@ -56,16 +56,16 @@ def register():
     nome = dados.get('nome')
     email = dados.get('email')
     senha = dados.get('senha')
-    
+
     if not nome or not email or not senha:
         return jsonify({"erro": "Dados incompletos"}), 400
-        
+
     senha_hash = generate_password_hash(senha)
-    
+
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute('INSERT INTO usuarios (nome, email, senha_hash, role) VALUES (%s, %s, %s, %s)', 
+        cursor.execute('INSERT INTO usuarios (nome, email, senha_hash, role) VALUES (%s, %s, %s, %s)',
                        (nome, email, senha_hash, 'usuario'))
         conn.commit()
         cursor.close()
@@ -81,17 +81,17 @@ def login():
     dados = request.get_json()
     email = dados.get('email')
     senha = dados.get('senha')
-    
+
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     cursor.execute('SELECT * FROM usuarios WHERE email = %s', (email,))
     usuario = cursor.fetchone()
     cursor.close()
     conn.close()
-    
+
     if usuario and check_password_hash(usuario['senha_hash'], senha):
         return jsonify({
-            "mensagem": "Login aprovado", 
+            "mensagem": "Login aprovado",
             "usuario": {
                 "id": usuario['id'],
                 "nome": usuario['nome'],
@@ -100,6 +100,45 @@ def login():
         }), 200
     else:
         return jsonify({"erro": "Credenciais inválidas"}), 401
+
+# NOVO: usado pela tela de Gestão de Papéis do catalogo_web.
+# Endpoint "oculto" no sentido do enunciado (não tem link nenhum na
+# interface pública, e nem porta exposta pra internet — só existe na
+# rede interna do Docker). A checagem de "quem pode chamar isso" já foi
+# feita antes, no catalogo_web, que é o único ponto público.
+@app.route('/usuarios', methods=['GET'])
+def listar_usuarios():
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute('SELECT id, nome, email, role FROM usuarios ORDER BY id')
+    usuarios = cursor.fetchall()
+    cursor.close()
+    conn.close()
+    return jsonify({"usuarios": usuarios}), 200
+
+# NOVO: altera o role de um usuário específico (promover/rebaixar).
+@app.route('/usuarios/<int:usuario_id>/role', methods=['PUT'])
+def atualizar_role(usuario_id):
+    dados = request.get_json()
+    novo_role = dados.get('role')
+
+    if novo_role not in ('usuario', 'admin'):
+        return jsonify({"erro": "role inválido. Use 'usuario' ou 'admin'."}), 400
+
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute('SELECT id FROM usuarios WHERE id = %s', (usuario_id,))
+    if not cursor.fetchone():
+        cursor.close()
+        conn.close()
+        return jsonify({"erro": "Usuário não encontrado"}), 404
+
+    cursor.execute('UPDATE usuarios SET role = %s WHERE id = %s', (novo_role, usuario_id))
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    return jsonify({"mensagem": f"Papel atualizado para '{novo_role}'."}), 200
 
 @app.route('/forgot-password', methods=['POST'])
 def forgot_password():
@@ -145,9 +184,9 @@ def reset_password():
     try:
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
-        
+
         cursor.execute('''
-            SELECT * FROM reset_tokens 
+            SELECT * FROM reset_tokens
             WHERE token = %s AND usado = FALSE AND expira_em > NOW()
         ''', (token,))
         registro = cursor.fetchone()
@@ -158,16 +197,16 @@ def reset_password():
             return jsonify({"erro": "Link inválido ou expirado"}), 400
 
         senha_hash = generate_password_hash(nova_senha)
-        
+
         cursor.execute('UPDATE usuarios SET senha_hash = %s WHERE id = %s', (senha_hash, registro['usuario_id']))
         cursor.execute('UPDATE reset_tokens SET usado = TRUE WHERE token = %s', (token,))
-        
+
         conn.commit()
         cursor.close()
         conn.close()
 
         return jsonify({"mensagem": "Senha redefinida com sucesso! Faça login com a nova senha."}), 200
-        
+
     except Exception as e:
         if 'conn' in locals() and conn.is_connected():
             cursor.close()
