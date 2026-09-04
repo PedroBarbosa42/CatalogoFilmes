@@ -36,7 +36,10 @@
             <p class="movie-overview">{{ movie.overview or 'Sinopse não disponível.' }}</p>
 
             {% if movie.id in favoritos %}
-                <p class="favorite-label">★ Favoritado</p>
+                <form action="/desfavoritar" method="POST">
+                    <input type="hidden" name="movie_id" value="{{ movie.id }}">
+                    <button class="btn-favorite favorited" type="submit">★ Desfavoritar</button>
+                </form>
             {% else %}
                 <form action="/favoritar" method="POST">
                     <input type="hidden" name="movie_id" value="{{ movie.id }}">

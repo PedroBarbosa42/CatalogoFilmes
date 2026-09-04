@@ -8,10 +8,6 @@ from werkzeug.security import generate_password_hash, check_password_hash
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'default_secret')
 
-# Decorator reutilizável para as rotas que são EXCLUSIVAS de admin
-# (gestão de papéis e dashboard de métricas). A checagem de moderação de
-# comentário não usa isso porque ali o dono do comentário também tem
-# permissão — não é "admin only" puro.
 def admin_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
@@ -106,7 +102,7 @@ def index():
     url_busca = f"https://api.themoviedb.org/3/search/person?query=Tom+Hanks&api_key={api_key}"
     search_res = requests.get(url_busca).json()
 
-    print("Retorno TMDB:", search_res)  # Debug para ver o erro no terminal
+    print("Retorno TMDB:", search_res)
 
     movies = []
     if 'results' in search_res and len(search_res['results']) > 0:
@@ -122,11 +118,6 @@ def index():
     cursor.execute("SELECT tmdb_movie_id FROM favoritos WHERE usuario_id = %s", (session['user_id'],))
     favoritos = {row['tmdb_movie_id'] for row in cursor.fetchall()}
 
-    # ALTERADO: antes só trazia os comentários do próprio usuário logado.
-    # Agora traz os comentários de TODOS os usuários (join com "usuarios" para
-    # mostrar o nome do autor), pois moderação só faz sentido se dá pra ver
-    # comentários de outras pessoas. Também trazemos "id" e "usuario_id" de
-    # cada comentário, que são necessários para o botão de apagar.
     cursor.execute("""
         SELECT c.id, c.tmdb_movie_id, c.texto, c.usuario_id, u.nome
         FROM comentarios c
@@ -161,6 +152,20 @@ def favoritar():
         conn.close()
     return redirect(url_for('index'))
 
+@app.route('/desfavoritar', methods=['POST'])
+def desfavoritar():
+    if 'user_id' not in session: return redirect(url_for('login'))
+    movie_id = request.form['movie_id']
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM favoritos WHERE usuario_id = %s AND tmdb_movie_id = %s",
+                   (session['user_id'], movie_id))
+    conn.commit()
+    cursor.close()
+    conn.close()
+    return redirect(url_for('index'))
+
 @app.route('/comentar', methods=['POST'])
 def comentar():
     if 'user_id' not in session: return redirect(url_for('login'))
@@ -176,14 +181,6 @@ def comentar():
     conn.close()
     return redirect(url_for('index'))
 
-# NOVO: ação exclusiva de admin (com fallback para o dono do comentário).
-# Requisito 2: apagar comentário de QUALQUER usuário é privilégio de admin;
-# um "usuario" comum só pode apagar o próprio comentário.
-# Requisito 3: o enforcement roda aqui no backend, olhando o "role" que o
-# catalogo_web recebeu do auth_service no login (guardado na sessão
-# assinada do Flask) — não depende de nada que o front esconda ou mostre.
-# Funciona igual seja clicando no botão da interface ou chamando o endpoint
-# direto via curl/Postman com o cookie de sessão de um usuário autenticado.
 @app.route('/deletar-comentario/<int:comentario_id>', methods=['POST'])
 def deletar_comentario(comentario_id):
     if 'user_id' not in session:
@@ -215,11 +212,6 @@ def deletar_comentario(comentario_id):
     flash('Comentário apagado.', 'success')
     return redirect(url_for('index'))
 
-# NOVO: Gestão de Papéis — segunda ação exclusiva de admin.
-# Lista os usuários e permite promover/rebaixar o "role" de qualquer um.
-# A checagem de admin acontece aqui, no catalogo_web (único ponto público);
-# a alteração de fato é delegada ao auth_service, que é quem é dono da
-# tabela "usuarios".
 @app.route('/admin/usuarios', methods=['GET'])
 @admin_required
 def admin_usuarios():
@@ -244,9 +236,6 @@ def admin_alterar_role(usuario_id):
 
     return redirect(url_for('admin_usuarios'))
 
-# NOVO: Dashboard de Métricas — rota exclusiva de admin com um relatório
-# simples (quantos usuários existem, quantos favoritos, etc). O
-# catalogo_web tem acesso direto ao banco, então consulta na hora.
 @app.route('/admin/metricas', methods=['GET'])
 @admin_required
 def admin_metricas():
