@@ -236,6 +236,22 @@ def admin_alterar_role(usuario_id):
 
     return redirect(url_for('admin_usuarios'))
 
+@app.route('/admin/usuarios/<int:usuario_id>/deletar', methods=['POST'])
+@admin_required
+def admin_deletar_usuario(usuario_id):
+    if usuario_id == session['user_id']:
+        flash('Você não pode apagar a própria conta enquanto estiver logado.', 'danger')
+        return redirect(url_for('admin_usuarios'))
+
+    resposta = requests.delete(f'http://auth_api:5001/usuarios/{usuario_id}')
+
+    if resposta.status_code == 200:
+        flash(resposta.json().get('mensagem', 'Usuário apagado.'), 'success')
+    else:
+        flash(resposta.json().get('erro', 'Erro ao apagar usuário'), 'danger')
+
+    return redirect(url_for('admin_usuarios'))
+
 @app.route('/admin/metricas', methods=['GET'])
 @admin_required
 def admin_metricas():

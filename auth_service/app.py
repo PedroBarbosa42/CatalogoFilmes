@@ -32,15 +32,21 @@ Se você não solicitou, apenas ignore este e-mail.
 
     mensagem = MIMEText(corpo_email)
     mensagem['Subject'] = 'Recuperação de Senha - Catálogo de Filmes'
-    mensagem['From'] = 'seguranca@catalogofilmes.com'
+    mensagem['From'] = os.getenv('MAIL_FROM', 'seguranca@catalogofilmes.com')
     mensagem['To'] = email_destino
 
     try:
-        with smtplib.SMTP(os.getenv('MAIL_SERVER'), int(os.getenv('MAIL_PORT'))) as server:
-            if os.getenv('MAIL_USE_TLS') == 'True':
-                server.starttls()
-            server.login(os.getenv('MAIL_USERNAME'), os.getenv('MAIL_PASSWORD'))
-            server.send_message(mensagem)
+        usa_ssl = os.getenv('MAIL_USE_SSL') == 'True'
+        if usa_ssl:
+            with smtplib.SMTP_SSL(os.getenv('MAIL_SERVER'), int(os.getenv('MAIL_PORT'))) as server:
+                server.login(os.getenv('MAIL_USERNAME'), os.getenv('MAIL_PASSWORD'))
+                server.send_message(mensagem)
+        else:
+            with smtplib.SMTP(os.getenv('MAIL_SERVER'), int(os.getenv('MAIL_PORT'))) as server:
+                if os.getenv('MAIL_USE_TLS') == 'True':
+                    server.starttls()
+                server.login(os.getenv('MAIL_USERNAME'), os.getenv('MAIL_PASSWORD'))
+                server.send_message(mensagem)
         return True
     except Exception as e:
         print(f"Erro SMTP: {e}")
@@ -101,11 +107,6 @@ def login():
     else:
         return jsonify({"erro": "Credenciais inválidas"}), 401
 
-# NOVO: usado pela tela de Gestão de Papéis do catalogo_web.
-# Endpoint "oculto" no sentido do enunciado (não tem link nenhum na
-# interface pública, e nem porta exposta pra internet — só existe na
-# rede interna do Docker). A checagem de "quem pode chamar isso" já foi
-# feita antes, no catalogo_web, que é o único ponto público.
 @app.route('/usuarios', methods=['GET'])
 def listar_usuarios():
     conn = get_db_connection()
@@ -116,7 +117,6 @@ def listar_usuarios():
     conn.close()
     return jsonify({"usuarios": usuarios}), 200
 
-# NOVO: altera o role de um usuário específico (promover/rebaixar).
 @app.route('/usuarios/<int:usuario_id>/role', methods=['PUT'])
 def atualizar_role(usuario_id):
     dados = request.get_json()
@@ -139,6 +139,26 @@ def atualizar_role(usuario_id):
     conn.close()
 
     return jsonify({"mensagem": f"Papel atualizado para '{novo_role}'."}), 200
+
+@app.route('/usuarios/<int:usuario_id>', methods=['DELETE'])
+def deletar_usuario(usuario_id):
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute('SELECT id FROM usuarios WHERE id = %s', (usuario_id,))
+    if not cursor.fetchone():
+        cursor.close()
+        conn.close()
+        return jsonify({"erro": "Usuário não encontrado"}), 404
+
+    cursor.execute('DELETE FROM favoritos WHERE usuario_id = %s', (usuario_id,))
+    cursor.execute('DELETE FROM comentarios WHERE usuario_id = %s', (usuario_id,))
+    cursor.execute('DELETE FROM reset_tokens WHERE usuario_id = %s', (usuario_id,))
+    cursor.execute('DELETE FROM usuarios WHERE id = %s', (usuario_id,))
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    return jsonify({"mensagem": "Usuário apagado com sucesso."}), 200
 
 @app.route('/forgot-password', methods=['POST'])
 def forgot_password():

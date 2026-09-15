@@ -25,7 +25,7 @@
 
         <table class="admin-table">
             <thead>
-                <tr><th>ID</th><th>Nome</th><th>E-mail</th><th>Papel atual</th><th>Alterar</th></tr>
+                <tr><th>ID</th><th>Nome</th><th>E-mail</th><th>Papel atual</th><th>Alterar</th><th>Excluir</th></tr>
             </thead>
             <tbody>
                 {% for u in usuarios %}
@@ -42,6 +42,14 @@
                             </select>
                             <button type="submit">Salvar</button>
                         </form>
+                    </td>
+                    <td>
+                        {% if u.id != session.get('user_id') %}
+                            <form action="{{ url_for('admin_deletar_usuario', usuario_id=u.id) }}" method="POST"
+                                  onsubmit="return confirm('Apagar {{ u.nome }} definitivamente? Isso também remove os favoritos e comentários dele.');">
+                                <button type="submit" class="comment-delete-btn" title="Apagar usuário">Apagar</button>
+                            </form>
+                        {% endif %}
                     </td>
                 </tr>
                 {% endfor %}
