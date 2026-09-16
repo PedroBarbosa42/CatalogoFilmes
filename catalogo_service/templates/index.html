@@ -18,6 +18,7 @@
                 {% if session.get('user_role') == 'admin' %}
                     <a class="btn" href="{{ url_for('admin_usuarios') }}">Gestão de papéis</a>
                     <a class="btn" href="{{ url_for('admin_metricas') }}">Métricas</a>
+                    <a class="btn" href="{{ url_for('admin_logs') }}">Logs</a>
                 {% endif %}
                 <a class="btn" href="/logout">Sair</a>
             </div>

@@ -2,11 +2,25 @@ import os
 import requests
 import mysql.connector
 from functools import wraps
+from datetime import datetime, timezone, timedelta
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'default_secret')
+
+BRASILIA_TZ = timezone(timedelta(hours=-3))
+
+def registrar_evento(usuario_id, acao, detalhe=''):
+    try:
+        requests.post('http://log_service:5002/eventos', json={
+            'usuario_id': usuario_id,
+            'acao': acao,
+            'detalhe': detalhe,
+            'ip': request.remote_addr
+        }, timeout=2)
+    except requests.exceptions.RequestException:
+        pass
 
 def admin_required(f):
     @wraps(f)
@@ -14,6 +28,7 @@ def admin_required(f):
         if 'user_id' not in session:
             return jsonify({"erro": "Não autenticado"}), 401
         if session.get('user_role') != 'admin':
+            registrar_evento(session['user_id'], 'acesso_negado', f'tentou acessar {request.path}')
             return jsonify({"erro": "Ação restrita a administradores."}), 403
         return f(*args, **kwargs)
     return decorated
@@ -64,6 +79,7 @@ def login():
             session['user_id'] = dados['usuario']['id']
             session['nome'] = dados['usuario']['nome']
             session['user_role'] = dados['usuario']['role']
+            registrar_evento(dados['usuario']['id'], 'login')
             flash('Login realizado com sucesso!', 'success')
             return redirect(url_for('index'))
         else:
@@ -90,6 +106,8 @@ def forgot_password():
 
 @app.route('/logout')
 def logout():
+    if 'user_id' in session:
+        registrar_evento(session['user_id'], 'logout')
     session.clear()
     return redirect(url_for('login'))
 
@@ -145,6 +163,7 @@ def favoritar():
         cursor.execute("INSERT INTO favoritos (usuario_id, tmdb_movie_id, titulo, poster_path) VALUES (%s, %s, %s, %s)",
                        (session['user_id'], movie_id, titulo, poster_path))
         conn.commit()
+        registrar_evento(session['user_id'], 'favoritar', titulo)
     except mysql.connector.IntegrityError:
         pass
     finally:
@@ -164,6 +183,7 @@ def desfavoritar():
     conn.commit()
     cursor.close()
     conn.close()
+    registrar_evento(session['user_id'], 'desfavoritar', movie_id)
     return redirect(url_for('index'))
 
 @app.route('/comentar', methods=['POST'])
@@ -179,6 +199,7 @@ def comentar():
     conn.commit()
     cursor.close()
     conn.close()
+    registrar_evento(session['user_id'], 'comentar', texto[:100])
     return redirect(url_for('index'))
 
 @app.route('/deletar-comentario/<int:comentario_id>', methods=['POST'])
@@ -202,12 +223,16 @@ def deletar_comentario(comentario_id):
     if not eh_dono and not eh_admin:
         cursor.close()
         conn.close()
+        registrar_evento(session['user_id'], 'acesso_negado', f'tentou apagar comentário {comentario_id} de outro usuário')
         return jsonify({"erro": "Ação restrita: apenas o autor do comentário ou um admin podem apagá-lo."}), 403
 
     cursor.execute("DELETE FROM comentarios WHERE id = %s", (comentario_id,))
     conn.commit()
     cursor.close()
     conn.close()
+
+    tipo = 'moderação' if eh_admin and not eh_dono else 'próprio'
+    registrar_evento(session['user_id'], 'apagar_comentario', f'comentário {comentario_id} ({tipo})')
 
     flash('Comentário apagado.', 'success')
     return redirect(url_for('index'))
@@ -285,6 +310,26 @@ def admin_metricas():
     }
 
     return render_template('admin_metricas.html', metricas=metricas)
+
+@app.route('/admin/logs', methods=['GET'])
+@admin_required
+def admin_logs():
+    n = request.args.get('n', default=50, type=int)
+
+    try:
+        resposta = requests.get(f'http://log_service:5002/eventos', params={'n': n}, timeout=3)
+        eventos = resposta.json().get('eventos', [])
+    except requests.exceptions.RequestException:
+        eventos = []
+        flash('Não foi possível consultar o log-service.', 'danger')
+
+    for ev in eventos:
+        try:
+            ev['timestamp_fmt'] = datetime.fromtimestamp(float(ev['timestamp']), tz=BRASILIA_TZ).strftime('%d/%m/%Y %H:%M:%S')
+        except (KeyError, ValueError, TypeError):
+            ev['timestamp_fmt'] = ev.get('timestamp', '')
+
+    return render_template('admin_logs.html', eventos=eventos, n=n)
 
 @app.route('/reset-password', methods=['GET', 'POST'])
 def reset_password():

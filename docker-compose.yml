@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   catalogo_web:
     build: ./catalogo_service
@@ -14,10 +12,12 @@ services:
       - SECRET_KEY=${SECRET_KEY}
     depends_on:
       - auth_api
+      - log_service
 
   auth_api:
     build: ./auth_service
     environment:
+      - PYTHONUNBUFFERED=1
       - DB_HOST=${DB_HOST}
       - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
@@ -28,3 +28,21 @@ services:
       - MAIL_PASSWORD=${MAIL_PASSWORD}
       - MAIL_USE_TLS=${MAIL_USE_TLS}
       - MAIL_USE_SSL=${MAIL_USE_SSL}
+      - MAIL_FROM=${MAIL_FROM}
+
+  log_service:
+    build: ./log_service
+    environment:
+      - PYTHONUNBUFFERED=1
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+
+volumes:
+  redis_data:
