@@ -1,8 +1,8 @@
 # 🎬 Catálogo de Filmes — Microsserviços, Autenticação e Papéis de Admin
 
-Aplicação web de catálogo de filmes (filmografia de Tom Hanks, via API do TMDB) onde usuários cadastrados podem favoritar filmes e comentar. Construída como dois microsserviços separados em containers Docker, com um serviço de autenticação isolado e um sistema de papéis (`usuario` / `admin`) com moderação, gestão de acessos e métricas.
+Aplicação web de catálogo de filmes (filmografia de Tom Hanks, via API do TMDB) onde usuários cadastrados podem favoritar filmes e comentar. Construída como microsserviços separados em containers Docker, com um serviço de autenticação isolado, um sistema de papéis (`usuario` / `admin`) com moderação, gestão de acessos e métricas, e um serviço de auditoria com Redis.
 
-Projeto desenvolvido para a disciplina do professor [@siriani](https://github.com/siriani) — Atividade 3 (arquitetura de microsserviços) e evolução com controle de permissões por papel.
+Projeto desenvolvido para a disciplina do professor [@siriani](https://github.com/siriani) — Atividade 3 (arquitetura de microsserviços), evolução com controle de permissões por papel, e continuação com logs de auditoria.
 
 **Ambiente publicado:** `https://pedro-ferreira-isw055.lapps.studio`
 
@@ -10,7 +10,7 @@ Projeto desenvolvido para a disciplina do professor [@siriani](https://github.co
 
 ## 🏗️ Arquitetura
 
-A aplicação é dividida em dois serviços independentes, cada um no seu container, comunicando-se pela rede interna do Docker:
+A aplicação é dividida em serviços independentes, cada um no seu container, comunicando-se pela rede interna do Docker:
 
 ```
                     Internet
@@ -19,27 +19,29 @@ A aplicação é dividida em dois serviços independentes, cada um no seu contai
               ┌───────────────────┐
               │   catalogo_web     │  ← único ponto público (porta 8225)
               │  (Flask, templates)│
-              └─────────┬──────────┘
-                         │ rede interna Docker
-                         │ (sem porta exposta)
-                         ▼
-              ┌───────────────────┐
-              │     auth_api       │
-              │  (Flask, sem UI)   │
-              └─────────┬──────────┘
-                         │
-                         ▼
-              ┌───────────────────┐
-              │   MySQL externo    │  (fora do docker-compose,
-              │  (usuarios, favo-  │   acessado também via DBeaver)
-              │  ritos, comentá-   │
-              │  rios, reset_...)  │
-              └───────────────────┘
+              └───┬───────────┬────┘
+                   │           │ rede interna Docker
+                   │           │ (sem porta exposta)
+                   ▼           ▼
+      ┌───────────────────┐  ┌───────────────────┐
+      │     auth_api       │  │    log_service     │
+      │  (Flask, sem UI)   │  │  (Flask, sem UI)   │
+      └─────────┬──────────┘  └─────────┬──────────┘
+                 │                       │
+                 ▼                       ▼
+      ┌───────────────────┐   ┌───────────────────┐
+      │   MySQL externo    │   │   Redis Stream     │
+      │  (usuarios, favo-  │   │   "auditoria"      │
+      │  ritos, comentá-   │   │  (XADD / XREVRANGE)│
+      │  rios, reset_...)  │   └───────────────────┘
+      └───────────────────┘
 ```
 
-- **`catalogo_service` (`catalogo_web`)**: único serviço com porta publicada para fora (`8225:5000`). Serve as páginas (catálogo, login, cadastro, telas de admin), guarda a sessão do usuário logado e fala com o `auth_api` quando precisa (login, cadastro, recuperação de senha, gestão de papéis).
-- **`auth_service` (`auth_api`)**: **não tem porta publicada para o host** — só é alcançável pela rede interna do Docker (`http://auth_api:5001`). Concentra tudo relacionado a identidade: cadastro, login, papéis (`role`), recuperação de senha com envio de e-mail real via Mailtrap.
-- **Banco de dados**: MySQL **externo**, fora do `docker-compose.yml` (endereço configurado em `.env` via `DB_HOST`), compartilhado pelos dois serviços.
+- **`catalogo_service` (`catalogo_web`)**: único serviço com porta publicada para fora (`8225:5000`). Serve as páginas (catálogo, login, cadastro, telas de admin), guarda a sessão do usuário logado, fala com o `auth_api` quando precisa (login, cadastro, recuperação de senha, gestão de papéis) e manda cada ação relevante pro `log_service`.
+- **`auth_service` (`auth_api`)**: **não tem porta publicada para o host** — só é alcançável pela rede interna do Docker (`http://auth_api:5001`). Concentra tudo relacionado a identidade: cadastro, login, papéis (`role`), exclusão de usuário, recuperação de senha com envio de e-mail real via Mailtrap.
+- **`log_service`**: também **sem porta publicada** — recebe eventos de auditoria do `catalogo_web` e grava num Redis Stream. Não sabe nada sobre permissões ou regras de negócio, só registra e devolve o que já aconteceu.
+- **Banco de dados**: MySQL **externo**, fora do `docker-compose.yml` (endereço configurado em `.env` via `DB_HOST`), compartilhado pelos serviços de dado.
+- **Redis**: também dentro do `docker-compose.yml`, sem porta publicada, guarda só o histórico de eventos (não é dado de negócio).
 
 ---
 
@@ -59,7 +61,9 @@ A aplicação é dividida em dois serviços independentes, cada um no seu contai
 ### Administração (exclusivo de `admin`)
 - **Moderação de comentários**: apaga o comentário de **qualquer usuário** (não só os próprios) — útil pra remover spoiler ou xingamento.
 - **Gestão de papéis**: tela (`/admin/usuarios`) que lista todos os usuários cadastrados e permite promover (`usuario` → `admin`) ou rebaixar (`admin` → `usuario`) qualquer um.
+- **Excluir usuário**: na mesma tela de gestão de papéis, remove definitivamente um usuário e todos os dados ligados a ele (favoritos, comentários, tokens de recuperação de senha) — `POST /admin/usuarios/<id>/deletar`. Um admin **não pode apagar a própria conta** enquanto estiver logado (bloqueio próprio, pra evitar se auto-excluir e ficar sem acesso).
 - **Dashboard de métricas** (`/admin/metricas`): total de usuários cadastrados, total de favoritos, filmes distintos favoritados, total de comentários e a quebra de usuários por papel.
+- **Logs de auditoria** (`/admin/logs`): consulta os últimos eventos do sistema — login, logout, favoritar, comentar, moderação e tentativas de acesso negado — na ordem do mais recente pro mais antigo.
 
 ---
 
@@ -74,7 +78,9 @@ A aplicação é dividida em dois serviços independentes, cada um no seu contai
 ### `admin` herda tudo isso e, além disso, pode:
 - **Moderação de comentários**: apagar o comentário de **qualquer usuário** — `POST /deletar-comentario/<id>`.
 - **Gestão de papéis**: listar todos os usuários e promover/rebaixar o `role` de qualquer um — `GET /admin/usuarios` e `POST /admin/usuarios/<id>/role`.
+- **Excluir usuário**: apagar definitivamente qualquer conta (exceto a própria) — `POST /admin/usuarios/<id>/deletar`.
 - **Dashboard de métricas**: ver o relatório interno — `GET /admin/metricas`.
+- **Logs de auditoria**: consultar o histórico de ações do sistema — `GET /admin/logs`.
 
 ---
 
@@ -83,13 +89,55 @@ A aplicação é dividida em dois serviços independentes, cada um no seu contai
 Todas as checagens abaixo rodam **no backend**, a partir do `role` do usuário autenticado (guardado na sessão assinada do Flask, recebida do `auth_api` no login) — nunca dependem de nada que a interface esconda, então funcionam igual clicando na tela ou chamando o endpoint direto:
 
 - **`POST /deletar-comentario/<id>`**: permite se o usuário é o **autor** do comentário OU **admin**; qualquer outro caso → `403`.
-- **`GET /admin/usuarios`**, **`POST /admin/usuarios/<id>/role`**, **`GET /admin/metricas`**: só permitem se `role == 'admin'` (decorator `@admin_required`); qualquer outro caso → `403` (ou `401` se nem estiver logado).
+- **`GET /admin/usuarios`**, **`POST /admin/usuarios/<id>/role`**, **`POST /admin/usuarios/<id>/deletar`**, **`GET /admin/metricas`**, **`GET /admin/logs`**: só permitem se `role == 'admin'` (decorator `@admin_required`); qualquer outro caso → `403` (ou `401` se nem estiver logado).
 
-A gestão de papéis é dividida em duas pontas: o `catalogo_web` (único ponto público) faz a checagem de admin e delega a alteração de fato para dois endpoints internos do `auth_api` (`GET /usuarios` e `PUT /usuarios/<id>/role`) — que não têm porta exposta pra internet, só acessíveis pela rede interna do Docker, então continuam invisíveis de fora mesmo sem checagem própria de role.
+A gestão de papéis e a exclusão de usuário são divididas em duas pontas: o `catalogo_web` (único ponto público) faz a checagem de admin e delega a alteração de fato para endpoints internos do `auth_api` (`GET /usuarios`, `PUT /usuarios/<id>/role`, `DELETE /usuarios/<id>`) — que não têm porta exposta pra internet, só acessíveis pela rede interna do Docker, então continuam invisíveis de fora mesmo sem checagem própria de role. A exclusão em si apaga primeiro os favoritos, comentários e tokens de reset do usuário (pra não violar as chaves estrangeiras) e só depois o usuário.
 
 ---
 
-## 🧪 Demonstração prática
+## 📋 Logs e Auditoria
+
+Continuação da atividade de controle de acesso: agora toda ação relevante do sistema deixa um rastro — quem fez, o quê, e quando.
+
+### Por que um microsserviço próprio, e por que Redis
+
+O `log_service` é mais um container, na mesma rede interna do Docker, **sem porta publicada pro host** — mesmo princípio do `auth_api`. Ele não sabe nada sobre regras de negócio ou permissões: só recebe eventos e grava. Quem decide o quê logar é sempre o `catalogo_web`, porque é ele quem tem a sessão do usuário logado.
+
+Log de auditoria tem um padrão de uso bem diferente de dado de negócio: escreve muito, lê pouco, sem transação complexa. Por isso não fica no MySQL — vai pro **Redis Streams** (`XADD` para gravar, `XREVRANGE` para consultar os mais recentes primeiro), estrutura pensada exatamente pra esse tipo de log ordenado no tempo.
+
+### Eventos registrados
+
+| Ação | Onde é disparado |
+|---|---|
+| `login` | Depois de autenticar com sucesso no `auth_api` |
+| `logout` | Antes de limpar a sessão |
+| `favoritar` / `desfavoritar` | Ao adicionar/remover um favorito |
+| `comentar` | Ao publicar um comentário |
+| `apagar_comentario` | Ao apagar um comentário — o `detalhe` diz se foi `(próprio)` ou `(moderação)` |
+| `acesso_negado` | Toda vez que uma rota de admin barra um usuário comum com `403` — tanto o decorator `@admin_required` quanto o `403` manual da moderação de comentário registram isso |
+
+Cada evento grava `usuario_id`, `acao`, `detalhe`, `ip` (bônus) e `timestamp` (convertido pro horário de Brasília, UTC-3, na exibição).
+
+### Consultar os logs — só admin
+
+`GET /admin/logs` (aceita `?n=` pra mudar quantos eventos trazer, padrão 50) — protegida pelo mesmo `@admin_required` das outras telas de admin: um `usuario` comum recebe `403` igual às demais.
+
+### Demonstração
+
+1. Login com um usuário comum → aparece `login` no log.
+2. Favoritar um filme → aparece `favoritar`.
+3. Comentar → aparece `comentar`.
+4. Tentar acessar `/admin/usuarios` sem ser admin → aparece `acesso_negado` (e a tela mostra `403`, igual antes).
+5. Logout → aparece `logout`.
+6. Logar como admin, abrir `/admin/logs` → todos os eventos acima aparecem, do mais recente pro mais antigo.
+
+| Sequência completa (usuário comum) |
+|---|
+| ![Login, favoritar, comentar, acesso negado e logout aparecendo em ordem no log](imagens/logs-sequencia.png) |
+
+---
+
+## 🧪 Demonstração prática — controle de acesso
 
 O domínio público (`https://pedro-ferreira-isw055.lapps.studio`) fica atrás de um desafio anti-bot do Cloudflare, que barra requisições automatizadas sem navegador (curl, Postman) antes mesmo de chegar na aplicação. Por isso, a demonstração foi feita de duas formas, dependendo do alvo:
 
@@ -194,6 +242,12 @@ CatalogoFilmes/
 │   ├── requirements.txt
 │   └── app.py                   # /register /login /forgot-password /reset-password
 │                                 # /usuarios (interno) /usuarios/<id>/role (interno)
+│                                 # /usuarios/<id> DELETE (interno)
+│
+├── log_service/                  # serviço de auditoria (sem porta pública)
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   └── app.py                    # POST /eventos, GET /eventos (grava/lê no Redis)
 │
 └── catalogo_service/             # serviço público (porta 8225)
     ├── Dockerfile
@@ -207,8 +261,9 @@ CatalogoFilmes/
         ├── forgot_password.html
         ├── reset_password.html
         ├── index.html
-        ├── admin_usuarios.html   # gestão de papéis
-        └── admin_metricas.html   # dashboard de métricas
+        ├── admin_usuarios.html   # gestão de papéis + exclusão de usuário
+        ├── admin_metricas.html   # dashboard de métricas
+        └── admin_logs.html       # logs de auditoria
 ```
 
 ---
@@ -224,11 +279,13 @@ reset_tokens  (token, usuario_id, criado_em, expira_em, usado)
 
 `role` aceita dois valores: `usuario` (padrão) e `admin`.
 
+Os eventos de auditoria **não** ficam nessas tabelas — vivem à parte, no Redis Stream `auditoria`, gerenciado pelo `log_service`.
+
 ---
 
 ## 🐳 Configuração do Docker (docker-compose.yml)
 
-Os dois serviços da aplicação ficam isolados na mesma rede Docker, garantindo que o `auth_api` não exponha portas externas — o `catalogo_web` é o único ponto de entrada público:
+Os serviços da aplicação ficam isolados na mesma rede Docker, garantindo que `auth_api`, `log_service` e `redis` não exponham portas externas — o `catalogo_web` é o único ponto de entrada público:
 
 ```yaml
 services:
@@ -245,11 +302,13 @@ services:
       - SECRET_KEY=${SECRET_KEY}
     depends_on:
       - auth_api
+      - log_service
 
   auth_api:
     build: ./auth_service
     # SEM PORTAS EXPOSTAS (sem diretiva 'ports')
     environment:
+      - PYTHONUNBUFFERED=1
       - DB_HOST=${DB_HOST}
       - DB_USER=${DB_USER}
       - DB_PASSWORD=${DB_PASSWORD}
@@ -260,9 +319,29 @@ services:
       - MAIL_PASSWORD=${MAIL_PASSWORD}
       - MAIL_USE_TLS=${MAIL_USE_TLS}
       - MAIL_USE_SSL=${MAIL_USE_SSL}
+      - MAIL_FROM=${MAIL_FROM}
+
+  log_service:
+    build: ./log_service
+    # SEM PORTAS EXPOSTAS (sem diretiva 'ports')
+    environment:
+      - PYTHONUNBUFFERED=1
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:7-alpine
+    # SEM PORTAS EXPOSTAS (sem diretiva 'ports')
+    volumes:
+      - redis_data:/data
+
+volumes:
+  redis_data:
 ```
 
-O banco de dados MySQL roda **fora** desse `docker-compose.yml` — o endereço vem da variável `DB_HOST` no `.env`.
+O banco de dados MySQL roda **fora** desse `docker-compose.yml` — o endereço vem da variável `DB_HOST` no `.env`. Já o Redis roda **dentro** do `docker-compose.yml`, mas também sem porta publicada — só o `log_service` fala com ele.
 
 ---
 
@@ -275,4 +354,4 @@ O banco de dados MySQL roda **fora** desse `docker-compose.yml` — o endereço 
    ```sql
    UPDATE usuarios SET role = 'admin' WHERE email = 'seu_email_de_teste@x.com';
    ```
-   A partir daí, promover os próximos usuários já pode ser feito pela própria tela `/admin/usuarios`.
+   A partir daí, promover os próximos usuários (e apagar contas, se precisar) já pode ser feito pela própria tela `/admin/usuarios`.
