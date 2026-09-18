@@ -2,8 +2,7 @@
 
 Aplicação web de catálogo de filmes (filmografia de Tom Hanks, via API do TMDB) onde usuários cadastrados podem favoritar filmes e comentar. Construída como microsserviços separados em containers Docker, com um serviço de autenticação isolado, um sistema de papéis (`usuario` / `admin`) com moderação, gestão de acessos e métricas, e um serviço de auditoria com Redis.
 
-Projeto desenvolvido para a disciplina do professor [@siriani](https://github.com/siriani) — Atividade 3 (arquitetura de microsserviços), evolução com controle de permissões por papel, e continuação com logs de auditoria.
-
+Projeto desenvolvido para a disciplina do professor [@siriani](https://github.com/siriani) 
 **Ambiente publicado:** `https://pedro-ferreira-isw055.lapps.studio`
 
 ---
