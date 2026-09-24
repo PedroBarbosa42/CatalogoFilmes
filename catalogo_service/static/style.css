@@ -95,7 +95,7 @@ a:hover { color: var(--red); }
 .hero-content { position: relative; z-index: 2; max-width: 560px; }
 .hero-kicker { color: var(--gold); font-size: .78rem; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; margin-bottom: 10px; }
 .hero-title { font-size: clamp(2rem, 5.5vw, 3.6rem); line-height: 1.02; margin-bottom: 16px; }
-.hero-overview { color: #e5e5e5; font-size: .98rem; line-height: 1.55; max-width: 480px; margin-bottom: 22px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.hero-overview { color: #e5e5e5; font-size: .98rem; line-height: 1.55; max-width: 480px; margin-bottom: 22px; display: -webkit-box; line-clamp: 3; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .hero-actions { display: flex; gap: 12px; flex-wrap: wrap; }
 
 /* Rows */
