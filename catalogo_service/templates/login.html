@@ -1,31 +1,18 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Entrar | Catálogo</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-</head>
-<body class="auth-page">
-  <main class="auth-panel">
-    <section class="auth-intro">
-      <div><p class="site-kicker">Arquivo de cinema</p><h1>Grandes histórias, em cartaz.</h1></div>
-      <p>Explore a filmografia de Tom Hanks, salve seus favoritos e registre suas impressões.</p>
-    </section>
-    <section class="auth-form">
-    <h2>Entrar</h2>
-    <p class="auth-subtitle">Acesse seu catálogo pessoal.</p>
-    {% with messages = get_flashed_messages() %}
-      {% if messages %} <p class="flash">{{ messages[0] }}</p> {% endif %}
-    {% endwith %}
-    <form method="POST">
-        <div class="form-row"><label for="email">E-mail</label><input id="email" type="email" name="email" required></div>
-        <div class="form-row"><label for="senha">Senha</label><input id="senha" type="password" name="senha" required></div>
-        <button type="submit">Entrar</button>
-    </form>
-    <p class="auth-link">Esqueceu sua senha? <a href="{{ url_for('forgot_password') }}">Clique aqui</a></p>
-    <p class="auth-link">Ainda não tem conta? <a href="/register">Criar conta</a></p>
-    </section>
-  </main>
-</body>
-</html>
+{% extends "auth_base.html" %}
+{% block title %}Entrar | CatálogoFilmes{% endblock %}
+{% block form_content %}
+<h1 class="auth-title">Entrar</h1>
+<form method="POST" class="auth-form">
+    <div class="auth-field">
+        <input id="email" type="email" name="email" placeholder=" " required>
+        <label for="email">E-mail</label>
+    </div>
+    <div class="auth-field">
+        <input id="senha" type="password" name="senha" placeholder=" " required>
+        <label for="senha">Senha</label>
+    </div>
+    <button type="submit" class="btn-block">Entrar</button>
+</form>
+<p class="auth-muted"><a href="{{ url_for('forgot_password') }}">Esqueceu a senha?</a></p>
+<p class="auth-divider">Novo por aqui? <a href="/register">Crie sua conta agora</a>.</p>
+{% endblock %}

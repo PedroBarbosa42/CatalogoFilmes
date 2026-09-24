@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}CatálogoFilmes{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="auth-page">
+    <a class="navbar-brand auth-brand" href="{{ url_for('login') }}">CATÁLOGO<span>FILMES</span></a>
+
+    <main class="auth-card">
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                <div class="flash-banner flash-banner-card">{{ messages[0] }}</div>
+            {% endif %}
+        {% endwith %}
+        {% block form_content %}{% endblock %}
+    </main>
+</body>
+</html>

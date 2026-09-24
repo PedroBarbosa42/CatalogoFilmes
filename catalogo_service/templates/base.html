@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}CatálogoFilmes{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+<nav class="navbar">
+    <a class="navbar-brand" href="{{ url_for('index') }}">CATÁLOGO<span>FILMES</span></a>
+    {% if session.get('user_id') %}
+    <div class="nav-user">
+        <span class="nav-greeting">
+            {{ session['nome'] }}{% if session.get('user_role') == 'admin' %} <span class="pill pill-gold">admin</span>{% endif %}
+        </span>
+        {% if session.get('user_role') == 'admin' %}
+            <a class="nav-link" href="{{ url_for('admin_usuarios') }}">Usuários</a>
+            <a class="nav-link" href="{{ url_for('admin_metricas') }}">Métricas</a>
+            <a class="nav-link" href="{{ url_for('admin_logs') }}">Logs</a>
+        {% endif %}
+        <a class="btn-pill" href="/logout">Sair</a>
+    </div>
+    {% endif %}
+</nav>
+
+{% with messages = get_flashed_messages() %}
+    {% if messages %}
+        <div class="flash-banner">{{ messages[0] }}</div>
+    {% endif %}
+{% endwith %}
+
+{% block content %}{% endblock %}
+
+</body>
+</html>

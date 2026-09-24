@@ -1,79 +1,87 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Catálogo | Tom Hanks</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-</head>
-<body>
-    <div class="page-shell">
-        <header class="site-header">
-            <div>
-                <p class="site-kicker">Arquivo de cinema · 01</p>
-                <h1>Filmes de <span>Tom Hanks</span></h1>
-            </div>
-            <div class="user-area">
-                <span>Bem-vindo, {{ session['nome'] }}{% if session.get('user_role') == 'admin' %} (admin){% endif %}</span>
-                {% if session.get('user_role') == 'admin' %}
-                    <a class="btn" href="{{ url_for('admin_usuarios') }}">Gestão de papéis</a>
-                    <a class="btn" href="{{ url_for('admin_metricas') }}">Métricas</a>
-                    <a class="btn" href="{{ url_for('admin_logs') }}">Logs</a>
-                {% endif %}
-                <a class="btn" href="/logout">Sair</a>
-            </div>
-        </header>
+{% extends "base.html" %}
+{% block title %}CatálogoFilmes{% endblock %}
 
-    {% with messages = get_flashed_messages() %}
-    {% if messages %} <p class="flash">{{ messages[0] }}</p> {% endif %}
-    {% endwith %}
-
-    <main class="movie-grid">
-        {% for movie in movies if movie.poster_path %}
-        <article class="movie-card">
-            <img class="movie-poster" src="https://image.tmdb.org/t/p/w500{{ movie.poster_path }}" alt="Pôster de {{ movie.title }}">
-            <div class="movie-content">
-            <h3 class="movie-title">{{ movie.title }}</h3>
-            <p class="movie-overview">{{ movie.overview or 'Sinopse não disponível.' }}</p>
-
-            {% if movie.id in favoritos %}
+{% block content %}
+{% set destaque = movies|selectattr('poster_path')|first %}
+{% if destaque %}
+<header class="hero" style="background-image:url('https://image.tmdb.org/t/p/w1280{{ destaque.poster_path }}');">
+    <div class="hero-content">
+        <p class="hero-kicker">Em destaque</p>
+        <h1 class="hero-title">{{ destaque.title }}</h1>
+        <p class="hero-overview">{{ destaque.overview or 'Sinopse não disponível.' }}</p>
+        <div class="hero-actions">
+            {% if destaque.id in favoritos %}
                 <form action="/desfavoritar" method="POST">
-                    <input type="hidden" name="movie_id" value="{{ movie.id }}">
-                    <button class="btn-favorite favorited" type="submit">★ Desfavoritar</button>
+                    <input type="hidden" name="movie_id" value="{{ destaque.id }}">
+                    <button type="submit" class="btn-pill btn-gold">★ Desfavoritar</button>
                 </form>
             {% else %}
                 <form action="/favoritar" method="POST">
-                    <input type="hidden" name="movie_id" value="{{ movie.id }}">
-                    <input type="hidden" name="titulo" value="{{ movie.title }}">
-                    <input type="hidden" name="poster_path" value="{{ movie.poster_path }}">
-                    <button class="btn-favorite" type="submit">Favoritar</button>
+                    <input type="hidden" name="movie_id" value="{{ destaque.id }}">
+                    <input type="hidden" name="titulo" value="{{ destaque.title }}">
+                    <input type="hidden" name="poster_path" value="{{ destaque.poster_path }}">
+                    <button type="submit" class="btn-pill btn-red">+ Favoritar</button>
                 </form>
             {% endif %}
-
-            <hr class="card-divider">
-            <h4>Comentários</h4>
-            <ul class="comment-list">
-                {% for com in comentarios.get(movie.id, []) %}
-                    <li>
-                        <strong>{{ com.nome }}:</strong> {{ com.texto }}
-                        {% if com.usuario_id == session.get('user_id') or session.get('user_role') == 'admin' %}
-                            <form action="{{ url_for('deletar_comentario', comentario_id=com.id) }}" method="POST" style="display:inline;">
-                                <button type="submit" class="comment-delete-btn" title="Apagar comentário">✕</button>
-                            </form>
-                        {% endif %}
-                    </li>
-                {% endfor %}
-            </ul>
-
-            <form class="comment-form" action="/comentar" method="POST">
-                <input type="hidden" name="movie_id" value="{{ movie.id }}">
-                <input type="text" name="texto" placeholder="Comente..." required>
-                <button type="submit">Enviar</button>
-            </form>
-            </div>
-        </article>
-        {% endfor %}
-    </main>
+            <a href="#linha-titulos" class="btn-pill btn-ghost">Ver todos os títulos</a>
+        </div>
     </div>
-</body>
-</html>
+</header>
+{% endif %}
+
+<section class="row-section" id="linha-titulos">
+    <h2 class="row-title">Filmes de Tom Hanks</h2>
+    <div class="row-scroll">
+        {% for movie in movies if movie.poster_path %}
+        <details class="title-card">
+            <summary class="title-summary">
+                <img class="title-poster" src="https://image.tmdb.org/t/p/w342{{ movie.poster_path }}" alt="Pôster de {{ movie.title }}">
+                <div class="title-overlay">
+                    <span class="title-name">{{ movie.title }}</span>
+                    {% if movie.id in favoritos %}<span class="fav-check">★</span>{% endif %}
+                </div>
+            </summary>
+
+            <div class="title-panel">
+                <h3>{{ movie.title }}</h3>
+                <p class="title-panel-overview">{{ movie.overview or 'Sinopse não disponível.' }}</p>
+
+                {% if movie.id in favoritos %}
+                    <form action="/desfavoritar" method="POST">
+                        <input type="hidden" name="movie_id" value="{{ movie.id }}">
+                        <button type="submit" class="btn-pill btn-gold btn-sm">★ Desfavoritar</button>
+                    </form>
+                {% else %}
+                    <form action="/favoritar" method="POST">
+                        <input type="hidden" name="movie_id" value="{{ movie.id }}">
+                        <input type="hidden" name="titulo" value="{{ movie.title }}">
+                        <input type="hidden" name="poster_path" value="{{ movie.poster_path }}">
+                        <button type="submit" class="btn-pill btn-red btn-sm">+ Favoritar</button>
+                    </form>
+                {% endif %}
+
+                <hr class="title-divider">
+                <h4 class="comments-heading">Comentários</h4>
+                <ul class="comment-list">
+                    {% for com in comentarios.get(movie.id, []) %}
+                        <li>
+                            <span><strong>{{ com.nome }}:</strong> {{ com.texto }}</span>
+                            {% if com.usuario_id == session.get('user_id') or session.get('user_role') == 'admin' %}
+                                <form action="{{ url_for('deletar_comentario', comentario_id=com.id) }}" method="POST">
+                                    <button type="submit" class="comment-delete" title="Apagar comentário">✕</button>
+                                </form>
+                            {% endif %}
+                        </li>
+                    {% endfor %}
+                </ul>
+                <form class="comment-form" action="/comentar" method="POST">
+                    <input type="hidden" name="movie_id" value="{{ movie.id }}">
+                    <input type="text" name="texto" placeholder="Comente..." required>
+                    <button type="submit" class="btn-pill btn-red btn-sm">Enviar</button>
+                </form>
+            </div>
+        </details>
+        {% endfor %}
+    </div>
+</section>
+{% endblock %}
