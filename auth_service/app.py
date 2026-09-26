@@ -25,7 +25,7 @@ def get_db_connection():
     return conn
 
 def enviar_email_recuperacao(email_destino, token):
-    link_recuperacao = f"http://localhost:8225/reset-password?token={token}"
+    link_recuperacao = f"http://pedro-ferreira-isw055.lapps.studio/reset-password?token={token}"
 
     corpo_email = f"""Olá,
 
