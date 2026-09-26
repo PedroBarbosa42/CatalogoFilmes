@@ -33,7 +33,7 @@
     <h2 class="row-title">Filmes de Tom Hanks</h2>
     <div class="row-scroll">
         {% for movie in movies if movie.poster_path %}
-        <details class="title-card">
+        <details class="title-card" name="titulo-aberto">
             <summary class="title-summary">
                 <img class="title-poster" src="https://image.tmdb.org/t/p/w342{{ movie.poster_path }}" alt="Pôster de {{ movie.title }}">
                 <div class="title-overlay">

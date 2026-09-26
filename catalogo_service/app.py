@@ -1,6 +1,8 @@
 import os
 import requests
 import mysql.connector
+import threading
+from mysql.connector import pooling
 from functools import wraps
 from datetime import datetime, timezone, timedelta
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
@@ -11,16 +13,35 @@ app.secret_key = os.getenv('SECRET_KEY', 'default_secret')
 
 BRASILIA_TZ = timezone(timedelta(hours=-3))
 
+db_pool = pooling.MySQLConnectionPool(
+    pool_name="catalogo_pool",
+    pool_size=5,
+    host=os.getenv('DB_HOST'),
+    user=os.getenv('DB_USER'),
+    password=os.getenv('DB_PASSWORD'),
+    database=os.getenv('DB_NAME')
+)
+
+def get_db_connection():
+    conn = db_pool.get_connection()
+    conn.ping(reconnect=True, attempts=3, delay=0.5)
+    return conn
+
 def registrar_evento(usuario_id, acao, detalhe=''):
-    try:
-        requests.post('http://log_service:5002/eventos', json={
-            'usuario_id': usuario_id,
-            'acao': acao,
-            'detalhe': detalhe,
-            'ip': request.remote_addr
-        }, timeout=2)
-    except requests.exceptions.RequestException:
-        pass
+    ip = request.remote_addr
+
+    def _enviar():
+        try:
+            requests.post('http://log_service:5002/eventos', json={
+                'usuario_id': usuario_id,
+                'acao': acao,
+                'detalhe': detalhe,
+                'ip': ip
+            }, timeout=2)
+        except requests.exceptions.RequestException:
+            pass
+
+    threading.Thread(target=_enviar, daemon=True).start()
 
 def admin_required(f):
     @wraps(f)
@@ -32,14 +53,6 @@ def admin_required(f):
             return jsonify({"erro": "Ação restrita a administradores."}), 403
         return f(*args, **kwargs)
     return decorated
-
-def get_db_connection():
-    return mysql.connector.connect(
-        host=os.getenv('DB_HOST'),
-        user=os.getenv('DB_USER'),
-        password=os.getenv('DB_PASSWORD'),
-        database=os.getenv('DB_NAME')
-    )
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():

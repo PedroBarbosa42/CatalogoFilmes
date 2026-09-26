@@ -1,5 +1,6 @@
 from flask import Flask, request, jsonify
 import mysql.connector
+from mysql.connector import pooling
 import os
 from werkzeug.security import generate_password_hash, check_password_hash
 import secrets
@@ -9,16 +10,22 @@ from email.mime.text import MIMEText
 
 app = Flask(__name__)
 
+db_pool = pooling.MySQLConnectionPool(
+    pool_name="auth_pool",
+    pool_size=5,
+    host=os.getenv('DB_HOST'),
+    user=os.getenv('DB_USER'),
+    password=os.getenv('DB_PASSWORD'),
+    database=os.getenv('DB_NAME')
+)
+
 def get_db_connection():
-    return mysql.connector.connect(
-        host=os.getenv('DB_HOST'),
-        user=os.getenv('DB_USER'),
-        password=os.getenv('DB_PASSWORD'),
-        database=os.getenv('DB_NAME')
-    )
+    conn = db_pool.get_connection()
+    conn.ping(reconnect=True, attempts=3, delay=0.5)
+    return conn
 
 def enviar_email_recuperacao(email_destino, token):
-    link_recuperacao = f"https://pedro-ferreira-isw055.lapps.studio/reset-password?token={token}"
+    link_recuperacao = f"http://localhost:8225/reset-password?token={token}"
 
     corpo_email = f"""Olá,
 
