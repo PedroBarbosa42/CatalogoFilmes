@@ -1,4 +1,6 @@
 import os
+import json
+import uuid
 import requests
 import mysql.connector
 import threading
@@ -7,9 +9,12 @@ from functools import wraps
 from datetime import datetime, timezone, timedelta
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
+from minio import Minio
+from minio.error import S3Error
 
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'default_secret')
+app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024  # 5 MB — limite de tamanho pra qualquer upload
 
 BRASILIA_TZ = timezone(timedelta(hours=-3))
 
@@ -26,6 +31,43 @@ def get_db_connection():
     conn = db_pool.get_connection()
     conn.ping(reconnect=True, attempts=3, delay=0.5)
     return conn
+
+# --- MinIO (object storage da foto de perfil) ---
+MINIO_BUCKET = os.getenv('MINIO_BUCKET', 'perfis')
+MINIO_PUBLIC_URL = os.getenv('MINIO_PUBLIC_URL', 'http://localhost:9000')
+EXTENSOES_PERMITIDAS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+
+minio_client = Minio(
+    'minio:9000',  # nome do serviço na rede interna do Docker, não o MINIO_PUBLIC_URL
+    access_key=os.getenv('MINIO_ROOT_USER'),
+    secret_key=os.getenv('MINIO_ROOT_PASSWORD'),
+    secure=False
+)
+
+def garantir_bucket():
+    """Cria o bucket se ainda não existir e garante que ele é de leitura pública
+    (decisão documentada no README: bucket público em vez de URL pré-assinada)."""
+    if not minio_client.bucket_exists(MINIO_BUCKET):
+        minio_client.make_bucket(MINIO_BUCKET)
+
+    politica_publica = {
+        "Version": "2012-10-17",
+        "Statement": [{
+            "Effect": "Allow",
+            "Principal": {"AWS": ["*"]},
+            "Action": ["s3:GetObject"],
+            "Resource": [f"arn:aws:s3:::{MINIO_BUCKET}/*"]
+        }]
+    }
+    minio_client.set_bucket_policy(MINIO_BUCKET, json.dumps(politica_publica))
+
+try:
+    garantir_bucket()
+except Exception as e:
+    print(f"Aviso: não foi possível preparar o bucket do MinIO no startup: {e}")
+
+def extensao_valida(nome_arquivo):
+    return '.' in nome_arquivo and nome_arquivo.rsplit('.', 1)[1].lower() in EXTENSOES_PERMITIDAS
 
 def registrar_evento(usuario_id, acao, detalhe=''):
     ip = request.remote_addr
@@ -249,6 +291,99 @@ def deletar_comentario(comentario_id):
 
     flash('Comentário apagado.', 'success')
     return redirect(url_for('index'))
+
+# --- Perfil do usuário (foto via MinIO + bio) ---
+# IMPORTANTE: em nenhuma dessas 3 rotas o "de quem" vem do que o cliente manda
+# (não existe campo usuario_id lido de request.form/request.args aqui). A
+# identidade de quem está editando é SEMPRE session['user_id'] — mesmo que
+# alguém monte manualmente um POST com um usuario_id de outra pessoa no corpo,
+# esse campo é ignorado, porque nunca é lido.
+
+@app.route('/perfil', methods=['GET'])
+def perfil():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT nome, email, bio, foto_key FROM usuarios WHERE id = %s", (session['user_id'],))
+    usuario = cursor.fetchone()
+
+    cursor.execute(
+        "SELECT tmdb_movie_id, titulo, poster_path FROM favoritos WHERE usuario_id = %s ORDER BY criado_em DESC",
+        (session['user_id'],)
+    )
+    favoritos = cursor.fetchall()
+    cursor.close()
+    conn.close()
+
+    foto_url = f"{MINIO_PUBLIC_URL}/{MINIO_BUCKET}/{usuario['foto_key']}" if usuario and usuario.get('foto_key') else None
+
+    return render_template('perfil.html', usuario=usuario, favoritos=favoritos, foto_url=foto_url)
+
+@app.route('/perfil/bio', methods=['POST'])
+def atualizar_bio():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    bio = request.form.get('bio', '').strip()[:280]
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE usuarios SET bio = %s WHERE id = %s", (bio, session['user_id']))
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    registrar_evento(session['user_id'], 'atualizar_bio')
+    flash('Bio atualizada.', 'success')
+    return redirect(url_for('perfil'))
+
+@app.route('/perfil/foto', methods=['POST'])
+def atualizar_foto():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    arquivo = request.files.get('foto')
+    if not arquivo or arquivo.filename == '':
+        flash('Nenhum arquivo selecionado.', 'danger')
+        return redirect(url_for('perfil'))
+
+    if not extensao_valida(arquivo.filename):
+        flash('Formato inválido. Envie uma imagem (png, jpg, jpeg, gif ou webp).', 'danger')
+        return redirect(url_for('perfil'))
+
+    if not (arquivo.mimetype or '').startswith('image/'):
+        flash('Arquivo inválido: o tipo de conteúdo não é uma imagem.', 'danger')
+        return redirect(url_for('perfil'))
+
+    try:
+        garantir_bucket()
+
+        extensao = arquivo.filename.rsplit('.', 1)[1].lower()
+        chave = f"{session['user_id']}/{uuid.uuid4().hex}.{extensao}"
+
+        arquivo.stream.seek(0, os.SEEK_END)
+        tamanho = arquivo.stream.tell()
+        arquivo.stream.seek(0)
+
+        minio_client.put_object(
+            MINIO_BUCKET, chave, arquivo.stream, length=tamanho, content_type=arquivo.mimetype
+        )
+    except S3Error as e:
+        flash(f'Erro ao enviar a imagem para o object storage: {e}', 'danger')
+        return redirect(url_for('perfil'))
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE usuarios SET foto_key = %s WHERE id = %s", (chave, session['user_id']))
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    registrar_evento(session['user_id'], 'atualizar_foto_perfil', chave)
+    flash('Foto de perfil atualizada!', 'success')
+    return redirect(url_for('perfil'))
 
 @app.route('/admin/usuarios', methods=['GET'])
 @admin_required
