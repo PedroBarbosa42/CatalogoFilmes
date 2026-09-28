@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Perfil | CatálogoFilmes{% endblock %}
+
+{% block content %}
+<div class="admin-shell">
+    <p class="section-kicker">Minha conta</p>
+    <h1 class="section-title-lg">Perfil</h1>
+
+    <div class="profile-header">
+        {% if foto_url %}
+            <img src="{{ foto_url }}" alt="Foto de {{ usuario.nome }}" class="profile-photo">
+        {% else %}
+            <div class="profile-photo profile-photo-placeholder">{{ usuario.nome[0]|upper }}</div>
+        {% endif %}
+        <div class="profile-info">
+            <h2>{{ usuario.nome }}</h2>
+            <p class="profile-email">{{ usuario.email }}</p>
+            <p class="profile-bio">{{ usuario.bio or 'Nenhuma bio ainda.' }}</p>
+        </div>
+    </div>
+
+    <div class="profile-forms">
+        <form action="{{ url_for('atualizar_foto') }}" method="POST" enctype="multipart/form-data" class="profile-form">
+            <h4 class="comments-heading">Foto de perfil</h4>
+            <input type="file" name="foto" accept="image/png,image/jpeg,image/gif,image/webp" required>
+            <p class="profile-hint">png, jpg, gif ou webp, até 5 MB.</p>
+            <button type="submit" class="btn-pill btn-red btn-sm">Enviar foto</button>
+        </form>
+
+        <form action="{{ url_for('atualizar_bio') }}" method="POST" class="profile-form">
+            <h4 class="comments-heading">Bio</h4>
+            <textarea name="bio" maxlength="280" rows="4" placeholder="Fale um pouco sobre você (até 280 caracteres)">{{ usuario.bio or '' }}</textarea>
+            <button type="submit" class="btn-pill btn-red btn-sm">Salvar bio</button>
+        </form>
+    </div>
+
+    <h4 class="comments-heading profile-fav-title">Filmes favoritados ({{ favoritos|length }})</h4>
+    {% if favoritos %}
+    <div class="row-scroll">
+        {% for fav in favoritos %}
+        <div class="title-card">
+            <div class="title-summary">
+                <img class="title-poster" src="https://image.tmdb.org/t/p/w342{{ fav.poster_path }}" alt="Pôster de {{ fav.titulo }}">
+                <div class="title-overlay"><span class="title-name">{{ fav.titulo }}</span></div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+        <p class="auth-subtitle">Você ainda não favoritou nenhum filme.</p>
+    {% endif %}
+</div>
+{% endblock %}
