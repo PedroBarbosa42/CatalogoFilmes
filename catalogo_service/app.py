@@ -7,7 +7,7 @@ import threading
 from mysql.connector import pooling
 from functools import wraps
 from datetime import datetime, timezone, timedelta
-from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
+from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify, Response
 from werkzeug.security import generate_password_hash, check_password_hash
 from minio import Minio
 from minio.error import S3Error
@@ -34,32 +34,24 @@ def get_db_connection():
 
 # --- MinIO (object storage da foto de perfil) ---
 MINIO_BUCKET = os.getenv('MINIO_BUCKET', 'perfis')
-MINIO_PUBLIC_URL = os.getenv('MINIO_PUBLIC_URL', 'http://localhost:9000')
 EXTENSOES_PERMITIDAS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
 
 minio_client = Minio(
-    'minio:9000',  # nome do serviço na rede interna do Docker, não o MINIO_PUBLIC_URL
+    'minio:9000',  # nome do serviço na rede interna do Docker
     access_key=os.getenv('MINIO_ROOT_USER'),
     secret_key=os.getenv('MINIO_ROOT_PASSWORD'),
     secure=False
 )
 
 def garantir_bucket():
-    """Cria o bucket se ainda não existir e garante que ele é de leitura pública
-    (decisão documentada no README: bucket público em vez de URL pré-assinada)."""
+    """Cria o bucket se não existir e o mantém PRIVADO: o MinIO não tem porta
+    publicada, e as fotos só saem pela rota /foto/<id> do próprio app."""
     if not minio_client.bucket_exists(MINIO_BUCKET):
         minio_client.make_bucket(MINIO_BUCKET)
-
-    politica_publica = {
-        "Version": "2012-10-17",
-        "Statement": [{
-            "Effect": "Allow",
-            "Principal": {"AWS": ["*"]},
-            "Action": ["s3:GetObject"],
-            "Resource": [f"arn:aws:s3:::{MINIO_BUCKET}/*"]
-        }]
-    }
-    minio_client.set_bucket_policy(MINIO_BUCKET, json.dumps(politica_publica))
+    try:
+        minio_client.delete_bucket_policy(MINIO_BUCKET)
+    except S3Error:
+        pass
 
 try:
     garantir_bucket()
@@ -317,9 +309,45 @@ def perfil():
     cursor.close()
     conn.close()
 
-    foto_url = f"{MINIO_PUBLIC_URL}/{MINIO_BUCKET}/{usuario['foto_key']}" if usuario and usuario.get('foto_key') else None
+    foto_url = None
+    if usuario and usuario.get('foto_key'):
+        versao = usuario['foto_key'].rsplit('/', 1)[-1].split('.')[0]
+        foto_url = url_for('foto_perfil', usuario_id=session['user_id'], v=versao)
 
     return render_template('perfil.html', usuario=usuario, favoritos=favoritos, foto_url=foto_url)
+
+@app.route('/foto/<int:usuario_id>', methods=['GET'])
+def foto_perfil(usuario_id):
+    if 'user_id' not in session:
+        return ('', 401)
+
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT foto_key FROM usuarios WHERE id = %s", (usuario_id,))
+    linha = cursor.fetchone()
+    cursor.close()
+    conn.close()
+
+    if not linha or not linha['foto_key']:
+        return ('', 404)
+
+    try:
+        objeto = minio_client.get_object(MINIO_BUCKET, linha['foto_key'])
+    except S3Error:
+        return ('', 404)
+
+    def gerar():
+        try:
+            for pedaco in objeto.stream(32 * 1024):
+                yield pedaco
+        finally:
+            objeto.close()
+            objeto.release_conn()
+
+    resposta = Response(gerar(), mimetype=objeto.headers.get('Content-Type', 'application/octet-stream'))
+    resposta.headers['Cache-Control'] = 'private, max-age=86400'
+    resposta.headers['X-Content-Type-Options'] = 'nosniff'
+    return resposta
 
 @app.route('/perfil/bio', methods=['POST'])
 def atualizar_bio():
