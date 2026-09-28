@@ -284,13 +284,6 @@ def deletar_comentario(comentario_id):
     flash('Comentário apagado.', 'success')
     return redirect(url_for('index'))
 
-# --- Perfil do usuário (foto via MinIO + bio) ---
-# IMPORTANTE: em nenhuma dessas 3 rotas o "de quem" vem do que o cliente manda
-# (não existe campo usuario_id lido de request.form/request.args aqui). A
-# identidade de quem está editando é SEMPRE session['user_id'] — mesmo que
-# alguém monte manualmente um POST com um usuario_id de outra pessoa no corpo,
-# esse campo é ignorado, porque nunca é lido.
-
 @app.route('/perfil', methods=['GET'])
 def perfil():
     if 'user_id' not in session:
