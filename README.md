@@ -10,6 +10,10 @@ Projeto acadêmico desenvolvido para a disciplina do professor [@siriani](https:
 
 **Ambiente publicado:** `https://pedro-ferreira-isw055.lapps.studio`
 
+> ### 📄 Relatório (P1)
+> Metodologia, arquitetura e evidências de cada entrega do bimestre, em PDF:
+> **[📥 `docs/P1_ISW055_Pedro_Ferreira.pdf`](docs/P1_ISW055_Pedro_Ferreira.pdf)**
+
 ---
 
 ## 🏗️ Arquitetura
