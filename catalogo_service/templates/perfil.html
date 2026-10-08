@@ -34,6 +34,10 @@
             <form action="{{ url_for('premium_assinar') }}" method="POST">
                 <button type="submit" class="btn-pill btn-gold btn-sm">⭐ Assinar Premium — R$ 9,90/mês</button>
             </form>
+            <form action="{{ url_for('premium_sincronizar') }}" method="POST">
+                <button type="submit" class="btn-pill btn-ghost btn-sm">Já paguei, atualizar status</button>
+            </form>
+            <p class="profile-hint">Pagamento em ambiente de teste (Stripe). Cartão de teste: 4242 4242 4242 4242.</p>
         {% endif %}
     </div>
 
