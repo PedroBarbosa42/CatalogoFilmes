@@ -4,6 +4,7 @@ import uuid
 import requests
 import mysql.connector
 import threading
+import stripe
 from mysql.connector import pooling
 from functools import wraps
 from datetime import datetime, timezone, timedelta
@@ -17,6 +18,16 @@ app.secret_key = os.getenv('SECRET_KEY', 'default_secret')
 app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024  # 5 MB — limite de tamanho pra qualquer upload
 
 BRASILIA_TZ = timezone(timedelta(hours=-3))
+
+# --- Stripe (SEMPRE chaves de teste: sk_test_...) ---
+stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
+STRIPE_PRICE_ID = os.getenv('STRIPE_PRICE_ID')
+STRIPE_WEBHOOK_SECRET = os.getenv('STRIPE_WEBHOOK_SECRET')
+BASE_URL = os.getenv('BASE_URL', 'http://localhost:8225').rstrip('/')
+
+# Plano gratuito: no máximo 3 favoritos e 3 filmes em "assistir depois". Premium: ilimitado.
+LIMITE_GRATIS = 3
+TABELAS_COM_LIMITE = {'favoritos', 'assistir_depois'}
 
 db_pool = pooling.MySQLConnectionPool(
     pool_name="catalogo_pool",
@@ -87,6 +98,35 @@ def admin_required(f):
             return jsonify({"erro": "Ação restrita a administradores."}), 403
         return f(*args, **kwargs)
     return decorated
+
+# --- Premium ---
+# O status premium NÃO fica na sessão: o webhook do Stripe chega depois do login,
+# então a sessão ficaria desatualizada. Lemos do banco a cada checagem.
+def usuario_eh_premium(user_id):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT premium FROM usuarios WHERE id = %s", (user_id,))
+    linha = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    return bool(linha and linha[0])
+
+def contar_itens(tabela, user_id):
+    if tabela not in TABELAS_COM_LIMITE:  # whitelist: nome de tabela nunca vem do usuário
+        raise ValueError('tabela inválida')
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(f"SELECT COUNT(*) FROM {tabela} WHERE usuario_id = %s", (user_id,))
+    total = cursor.fetchone()[0]
+    cursor.close()
+    conn.close()
+    return total
+
+def atingiu_limite(tabela, user_id):
+    """True se o usuário NÃO é premium e já usou todas as vagas do plano gratuito."""
+    if usuario_eh_premium(user_id):
+        return False
+    return contar_itens(tabela, user_id) >= LIMITE_GRATIS
 
 @app.route('/register', methods=['GET', 'POST'])
 def register():
@@ -183,6 +223,9 @@ def index():
     cursor.execute("SELECT tmdb_movie_id FROM favoritos WHERE usuario_id = %s", (session['user_id'],))
     favoritos = {row['tmdb_movie_id'] for row in cursor.fetchall()}
 
+    cursor.execute("SELECT tmdb_movie_id FROM assistir_depois WHERE usuario_id = %s", (session['user_id'],))
+    assistir = {row['tmdb_movie_id'] for row in cursor.fetchall()}
+
     cursor.execute("""
         SELECT c.id, c.tmdb_movie_id, c.texto, c.usuario_id, u.nome
         FROM comentarios c
@@ -195,7 +238,8 @@ def index():
     cursor.close()
     conn.close()
 
-    return render_template('index.html', movies=movies, favoritos=favoritos, comentarios=comentarios)
+    return render_template('index.html', movies=movies, favoritos=favoritos,
+                           assistir=assistir, comentarios=comentarios)
 
 @app.route('/favoritar', methods=['POST'])
 def favoritar():
@@ -203,6 +247,12 @@ def favoritar():
     movie_id = request.form['movie_id']
     titulo = request.form['titulo']
     poster_path = request.form['poster_path']
+
+    # Regra de negócio: plano gratuito = até 3 favoritos; premium = ilimitado.
+    if atingiu_limite('favoritos', session['user_id']):
+        registrar_evento(session['user_id'], 'limite_atingido', 'favoritos')
+        flash(f'Limite de {LIMITE_GRATIS} favoritos do plano gratuito atingido. Assine o Premium para favoritar sem limite.', 'danger')
+        return redirect(url_for('perfil'))
 
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -232,6 +282,69 @@ def desfavoritar():
     conn.close()
     registrar_evento(session['user_id'], 'desfavoritar', movie_id)
     return redirect(url_for('index'))
+
+# --- Lista "Assistir depois" ---
+@app.route('/assistir-depois', methods=['GET'])
+def assistir_depois_lista():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute(
+        "SELECT tmdb_movie_id, titulo, poster_path FROM assistir_depois WHERE usuario_id = %s ORDER BY criado_em DESC",
+        (session['user_id'],)
+    )
+    filmes = cursor.fetchall()
+    cursor.close()
+    conn.close()
+
+    return render_template('assistir_depois.html', filmes=filmes,
+                           premium=usuario_eh_premium(session['user_id']), limite=LIMITE_GRATIS)
+
+@app.route('/assistir-depois/adicionar', methods=['POST'])
+def assistir_depois_adicionar():
+    if 'user_id' not in session: return redirect(url_for('login'))
+    movie_id = request.form['movie_id']
+    titulo = request.form['titulo']
+    poster_path = request.form['poster_path']
+
+    # Regra de negócio: plano gratuito = até 3 filmes na lista; premium = ilimitado.
+    if atingiu_limite('assistir_depois', session['user_id']):
+        registrar_evento(session['user_id'], 'limite_atingido', 'assistir_depois')
+        flash(f'Limite de {LIMITE_GRATIS} filmes na lista "Assistir depois" do plano gratuito. Assine o Premium para uma lista sem limite.', 'danger')
+        return redirect(url_for('perfil'))
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "INSERT INTO assistir_depois (usuario_id, tmdb_movie_id, titulo, poster_path) VALUES (%s, %s, %s, %s)",
+            (session['user_id'], movie_id, titulo, poster_path))
+        conn.commit()
+        registrar_evento(session['user_id'], 'assistir_depois_adicionar', titulo)
+        flash('Filme adicionado em "Assistir depois".', 'success')
+    except mysql.connector.IntegrityError:
+        pass
+    finally:
+        cursor.close()
+        conn.close()
+    return redirect(url_for('index'))
+
+@app.route('/assistir-depois/remover', methods=['POST'])
+def assistir_depois_remover():
+    if 'user_id' not in session: return redirect(url_for('login'))
+    movie_id = request.form['movie_id']
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM assistir_depois WHERE usuario_id = %s AND tmdb_movie_id = %s",
+                   (session['user_id'], movie_id))
+    conn.commit()
+    cursor.close()
+    conn.close()
+    registrar_evento(session['user_id'], 'assistir_depois_remover', movie_id)
+    return redirect(request.referrer or url_for('assistir_depois_lista'))
 
 @app.route('/comentar', methods=['POST'])
 def comentar():
@@ -291,7 +404,7 @@ def perfil():
 
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT nome, email, bio, foto_key FROM usuarios WHERE id = %s", (session['user_id'],))
+    cursor.execute("SELECT nome, email, bio, foto_key, premium FROM usuarios WHERE id = %s", (session['user_id'],))
     usuario = cursor.fetchone()
 
     cursor.execute(
@@ -299,6 +412,9 @@ def perfil():
         (session['user_id'],)
     )
     favoritos = cursor.fetchall()
+
+    cursor.execute("SELECT COUNT(*) AS total FROM assistir_depois WHERE usuario_id = %s", (session['user_id'],))
+    total_assistir = cursor.fetchone()['total']
     cursor.close()
     conn.close()
 
@@ -307,7 +423,8 @@ def perfil():
         versao = usuario['foto_key'].rsplit('/', 1)[-1].split('.')[0]
         foto_url = url_for('foto_perfil', usuario_id=session['user_id'], v=versao)
 
-    return render_template('perfil.html', usuario=usuario, favoritos=favoritos, foto_url=foto_url)
+    return render_template('perfil.html', usuario=usuario, favoritos=favoritos, foto_url=foto_url,
+                           total_assistir=total_assistir, limite=LIMITE_GRATIS)
 
 @app.route('/foto/<int:usuario_id>', methods=['GET'])
 def foto_perfil(usuario_id):
@@ -405,6 +522,92 @@ def atualizar_foto():
     registrar_evento(session['user_id'], 'atualizar_foto_perfil', chave)
     flash('Foto de perfil atualizada!', 'success')
     return redirect(url_for('perfil'))
+
+# --- Plano Premium (Stripe, modo de teste) ---
+@app.route('/premium/assinar', methods=['POST'])
+def premium_assinar():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    if usuario_eh_premium(session['user_id']):
+        flash('Você já é Premium.', 'success')
+        return redirect(url_for('perfil'))
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT email FROM usuarios WHERE id = %s", (session['user_id'],))
+    email = cursor.fetchone()[0]
+    cursor.close()
+    conn.close()
+
+    try:
+        # O cartão é digitado na página HOSPEDADA pelo Stripe: nosso sistema nunca vê o número.
+        checkout = stripe.checkout.Session.create(
+            mode='subscription',
+            line_items=[{'price': STRIPE_PRICE_ID, 'quantity': 1}],
+            client_reference_id=str(session['user_id']),  # é assim que o webhook sabe QUEM pagou
+            customer_email=email,
+            locale='pt-BR',
+            success_url=f'{BASE_URL}/premium/sucesso',
+            cancel_url=f'{BASE_URL}/perfil',
+        )
+    except stripe.StripeError as e:
+        flash(f'Erro ao iniciar o checkout: {e}', 'danger')
+        return redirect(url_for('perfil'))
+
+    registrar_evento(session['user_id'], 'checkout_iniciado')
+    return redirect(checkout.url, code=303)
+
+@app.route('/premium/sucesso', methods=['GET'])
+def premium_sucesso():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    flash('Pagamento recebido! O Premium é ativado assim que o Stripe confirmar (alguns segundos). Recarregue o perfil.', 'success')
+    return redirect(url_for('perfil'))
+
+@app.route('/webhook/stripe', methods=['POST'])
+def webhook_stripe():
+    # Corpo CRU: a assinatura é calculada sobre os bytes exatos. Não use get_json() antes.
+    payload = request.get_data()
+    assinatura = request.headers.get('Stripe-Signature', '')
+
+    # Sem a assinatura correta (segredo whsec_...), qualquer um poderia se "dar" premium
+    # chamando esta rota. Se a verificação falhar, nada é alterado.
+    try:
+        stripe.Webhook.construct_event(payload, assinatura, STRIPE_WEBHOOK_SECRET)
+    except ValueError:
+        return jsonify({"erro": "Payload inválido"}), 400
+    except stripe.SignatureVerificationError:
+        return jsonify({"erro": "Assinatura inválida"}), 400
+
+    evento = json.loads(payload)  # payload já verificado
+    tipo = evento.get('type')
+    obj = evento.get('data', {}).get('object', {})
+
+    if tipo == 'checkout.session.completed' and obj.get('payment_status') == 'paid':
+        usuario_id = obj.get('client_reference_id')
+        if usuario_id:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE usuarios SET premium = TRUE, stripe_customer_id = %s, stripe_subscription_id = %s WHERE id = %s",
+                (obj.get('customer'), obj.get('subscription'), int(usuario_id))
+            )
+            conn.commit()
+            cursor.close()
+            conn.close()
+            registrar_evento(int(usuario_id), 'premium_ativado', obj.get('subscription') or '')
+
+    elif tipo == 'customer.subscription.deleted':
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("UPDATE usuarios SET premium = FALSE WHERE stripe_subscription_id = %s", (obj.get('id'),))
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+    # Sempre 200 para eventos válidos (mesmo os que ignoramos), senão o Stripe reenvia.
+    return jsonify({"recebido": True}), 200
 
 @app.route('/admin/usuarios', methods=['GET'])
 @admin_required

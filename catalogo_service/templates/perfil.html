@@ -13,10 +13,28 @@
             <div class="profile-photo profile-photo-placeholder">{{ usuario.nome[0]|upper }}</div>
         {% endif %}
         <div class="profile-info">
-            <h2>{{ usuario.nome }}</h2>
+            <h2>{{ usuario.nome }}{% if usuario.premium %} <span class="pill pill-gold premium-badge">⭐ Premium</span>{% endif %}</h2>
             <p class="profile-email">{{ usuario.email }}</p>
             <p class="profile-bio">{{ usuario.bio or 'Nenhuma bio ainda.' }}</p>
         </div>
+    </div>
+
+    <div class="plan-card {{ 'plan-card-premium' if usuario.premium else '' }}">
+        {% if usuario.premium %}
+            <h4 class="comments-heading">Seu plano</h4>
+            <p class="plan-title">⭐ Plano Premium ativo</p>
+            <p class="profile-hint">Favoritos e lista "Assistir depois" sem limite de filmes.</p>
+            <a class="btn-pill btn-ghost btn-sm" href="{{ url_for('assistir_depois_lista') }}">Abrir minha lista Assistir depois</a>
+        {% else %}
+            <h4 class="comments-heading">Seu plano</h4>
+            <p class="plan-title">Plano gratuito</p>
+            <p class="profile-hint">
+                Favoritos: {{ favoritos|length }}/{{ limite }} &nbsp;•&nbsp; Assistir depois: {{ total_assistir }}/{{ limite }}
+            </p>
+            <form action="{{ url_for('premium_assinar') }}" method="POST">
+                <button type="submit" class="btn-pill btn-gold btn-sm">⭐ Assinar Premium — R$ 9,90/mês</button>
+            </form>
+        {% endif %}
     </div>
 
     <div class="profile-forms">

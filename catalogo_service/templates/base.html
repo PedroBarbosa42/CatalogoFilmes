@@ -15,6 +15,7 @@
             {{ session['nome'] }}{% if session.get('user_role') == 'admin' %} <span class="pill pill-gold">admin</span>{% endif %}
         </span>
         <a class="nav-link" href="{{ url_for('index') }}">Catálogo</a>
+        <a class="nav-link" href="{{ url_for('assistir_depois_lista') }}">Assistir depois</a>
         <a class="nav-link" href="{{ url_for('perfil') }}">Perfil</a>
         {% if session.get('user_role') == 'admin' %}
             <a class="nav-link" href="{{ url_for('admin_usuarios') }}">Usuários</a>

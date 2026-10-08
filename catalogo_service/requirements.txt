@@ -4,3 +4,4 @@ mysql-connector-python==8.2.0
 python-dotenv==1.0.0
 Werkzeug==3.0.1
 minio==7.2.7
+stripe>=8.0.0,<12

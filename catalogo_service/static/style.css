@@ -206,3 +206,11 @@ a:hover { color: var(--red); }
 .profile-form textarea:focus { outline: none; border-color: var(--red); }
 .profile-hint { margin: 0; color: var(--muted); font-size: .75rem; }
 .profile-fav-title { margin-bottom: 14px; }
+
+/* Premium / Assistir depois */
+.panel-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.premium-badge { vertical-align: middle; margin-left: 6px; }
+.plan-card { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 20px; margin-bottom: 28px; background: var(--bg-elevated); border: 1px solid var(--line); border-radius: var(--radius); }
+.plan-card-premium { border-color: var(--gold); }
+.plan-title { margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 1.15rem; font-weight: 700; }
+.watch-remove { margin-top: 8px; }

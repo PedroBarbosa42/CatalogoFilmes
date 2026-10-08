@@ -23,6 +23,21 @@
                     <button type="submit" class="btn-pill btn-red">+ Favoritar</button>
                 </form>
             {% endif %}
+
+            {% if destaque.id in assistir %}
+                <form action="{{ url_for('assistir_depois_remover') }}" method="POST">
+                    <input type="hidden" name="movie_id" value="{{ destaque.id }}">
+                    <button type="submit" class="btn-pill btn-ghost">✓ Na lista (remover)</button>
+                </form>
+            {% else %}
+                <form action="{{ url_for('assistir_depois_adicionar') }}" method="POST">
+                    <input type="hidden" name="movie_id" value="{{ destaque.id }}">
+                    <input type="hidden" name="titulo" value="{{ destaque.title }}">
+                    <input type="hidden" name="poster_path" value="{{ destaque.poster_path }}">
+                    <button type="submit" class="btn-pill btn-ghost">🕒 Assistir depois</button>
+                </form>
+            {% endif %}
+
             <a href="#linha-titulos" class="btn-pill btn-ghost">Ver todos os títulos</a>
         </div>
     </div>
@@ -39,6 +54,7 @@
                 <div class="title-overlay">
                     <span class="title-name">{{ movie.title }}</span>
                     {% if movie.id in favoritos %}<span class="fav-check">★</span>{% endif %}
+                    {% if movie.id in assistir %}<span class="fav-check" title="Na lista Assistir depois">🕒</span>{% endif %}
                 </div>
             </summary>
 
@@ -46,19 +62,35 @@
                 <h3>{{ movie.title }}</h3>
                 <p class="title-panel-overview">{{ movie.overview or 'Sinopse não disponível.' }}</p>
 
-                {% if movie.id in favoritos %}
-                    <form action="/desfavoritar" method="POST">
-                        <input type="hidden" name="movie_id" value="{{ movie.id }}">
-                        <button type="submit" class="btn-pill btn-gold btn-sm">★ Desfavoritar</button>
-                    </form>
-                {% else %}
-                    <form action="/favoritar" method="POST">
-                        <input type="hidden" name="movie_id" value="{{ movie.id }}">
-                        <input type="hidden" name="titulo" value="{{ movie.title }}">
-                        <input type="hidden" name="poster_path" value="{{ movie.poster_path }}">
-                        <button type="submit" class="btn-pill btn-red btn-sm">+ Favoritar</button>
-                    </form>
-                {% endif %}
+                <div class="panel-actions">
+                    {% if movie.id in favoritos %}
+                        <form action="/desfavoritar" method="POST">
+                            <input type="hidden" name="movie_id" value="{{ movie.id }}">
+                            <button type="submit" class="btn-pill btn-gold btn-sm">★ Desfavoritar</button>
+                        </form>
+                    {% else %}
+                        <form action="/favoritar" method="POST">
+                            <input type="hidden" name="movie_id" value="{{ movie.id }}">
+                            <input type="hidden" name="titulo" value="{{ movie.title }}">
+                            <input type="hidden" name="poster_path" value="{{ movie.poster_path }}">
+                            <button type="submit" class="btn-pill btn-red btn-sm">+ Favoritar</button>
+                        </form>
+                    {% endif %}
+
+                    {% if movie.id in assistir %}
+                        <form action="{{ url_for('assistir_depois_remover') }}" method="POST">
+                            <input type="hidden" name="movie_id" value="{{ movie.id }}">
+                            <button type="submit" class="btn-pill btn-ghost btn-sm">✓ Na lista</button>
+                        </form>
+                    {% else %}
+                        <form action="{{ url_for('assistir_depois_adicionar') }}" method="POST">
+                            <input type="hidden" name="movie_id" value="{{ movie.id }}">
+                            <input type="hidden" name="titulo" value="{{ movie.title }}">
+                            <input type="hidden" name="poster_path" value="{{ movie.poster_path }}">
+                            <button type="submit" class="btn-pill btn-ghost btn-sm">🕒 Assistir depois</button>
+                        </form>
+                    {% endif %}
+                </div>
 
                 <hr class="title-divider">
                 <h4 class="comments-heading">Comentários</h4>
