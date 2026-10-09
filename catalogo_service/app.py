@@ -1,6 +1,3 @@
-Aqui está o seu código sem os comentários:
-
-```python
 import os
 import json
 import uuid
@@ -775,4 +772,3 @@ def reset_password():
 
     return render_template('reset_password.html', token=token)
 
-```
