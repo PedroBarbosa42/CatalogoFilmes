@@ -15,17 +15,17 @@ from minio.error import S3Error
 
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'default_secret')
-app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024  
+app.config['MAX_CONTENT_LENGTH'] = 5 * 1024 * 1024  # 5 MB — limite de tamanho pra qualquer upload
 
 BRASILIA_TZ = timezone(timedelta(hours=-3))
 
-
+# --- Stripe (SEMPRE chaves de teste: sk_test_...) ---
 stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
 STRIPE_PRICE_ID = os.getenv('STRIPE_PRICE_ID')
 STRIPE_WEBHOOK_SECRET = os.getenv('STRIPE_WEBHOOK_SECRET')
 BASE_URL = os.getenv('BASE_URL', 'http://localhost:8225').rstrip('/')
 
-
+# Plano gratuito: no máximo 3 favoritos e 3 filmes em "assistir depois". Premium: ilimitado.
 LIMITE_GRATIS = 3
 TABELAS_COM_LIMITE = {'favoritos', 'assistir_depois'}
 
@@ -43,12 +43,12 @@ def get_db_connection():
     conn.ping(reconnect=True, attempts=3, delay=0.5)
     return conn
 
-
+# --- MinIO (object storage da foto de perfil) ---
 MINIO_BUCKET = os.getenv('MINIO_BUCKET', 'perfis')
 EXTENSOES_PERMITIDAS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
 
 minio_client = Minio(
-    'minio:9000',  
+    'minio:9000',  # nome do serviço na rede interna do Docker
     access_key=os.getenv('MINIO_ROOT_USER'),
     secret_key=os.getenv('MINIO_ROOT_PASSWORD'),
     secure=False
@@ -99,7 +99,9 @@ def admin_required(f):
         return f(*args, **kwargs)
     return decorated
 
-
+# --- Premium ---
+# O status premium NÃO fica na sessão: o webhook do Stripe chega depois do login,
+# então a sessão ficaria desatualizada. Lemos do banco a cada checagem.
 def usuario_eh_premium(user_id):
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -110,7 +112,7 @@ def usuario_eh_premium(user_id):
     return bool(linha and linha[0])
 
 def contar_itens(tabela, user_id):
-    if tabela not in TABELAS_COM_LIMITE:  
+    if tabela not in TABELAS_COM_LIMITE:  # whitelist: nome de tabela nunca vem do usuário
         raise ValueError('tabela inválida')
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -246,7 +248,7 @@ def favoritar():
     titulo = request.form['titulo']
     poster_path = request.form['poster_path']
 
-
+    # Regra de negócio: plano gratuito = até 3 favoritos; premium = ilimitado.
     if atingiu_limite('favoritos', session['user_id']):
         registrar_evento(session['user_id'], 'limite_atingido', 'favoritos')
         flash(f'Limite de {LIMITE_GRATIS} favoritos do plano gratuito atingido. Assine o Premium para favoritar sem limite.', 'danger')
@@ -521,6 +523,12 @@ def atualizar_foto():
     flash('Foto de perfil atualizada!', 'success')
     return redirect(url_for('perfil'))
 
+# --- Plano Premium (Stripe, modo de teste) ---
+# --- Ativação do premium por verificação direta no Stripe ---
+# Plano B do webhook: se a chamada do Stripe não chegar (ex.: Cloudflare bloqueando),
+# o app confirma o pagamento consultando a API do Stripe com a chave secreta.
+# Isso não pode ser forjado: quem responde é o Stripe, e só aceitamos uma sessão
+# que pertence ao usuário logado, está paga e tem assinatura ativa.
 def ativar_premium_se_valido(cs, user_id):
     if cs.get('client_reference_id') != str(user_id):
         return False
@@ -562,10 +570,11 @@ def premium_assinar():
     conn.close()
 
     try:
+        # O cartão é digitado na página HOSPEDADA pelo Stripe: nosso sistema nunca vê o número.
         checkout = stripe.checkout.Session.create(
             mode='subscription',
             line_items=[{'price': STRIPE_PRICE_ID, 'quantity': 1}],
-            client_reference_id=str(session['user_id']),  
+            client_reference_id=str(session['user_id']),  # é assim que o webhook sabe QUEM pagou
             customer_email=email,
             locale='pt-BR',
             success_url=f'{BASE_URL}/premium/sucesso?session_id={{CHECKOUT_SESSION_ID}}',
@@ -618,11 +627,12 @@ def premium_sincronizar():
 
 @app.route('/webhook/stripe', methods=['POST'])
 def webhook_stripe():
-   
+    # Corpo CRU: a assinatura é calculada sobre os bytes exatos. Não use get_json() antes.
     payload = request.get_data()
     assinatura = request.headers.get('Stripe-Signature', '')
 
-
+    # Sem a assinatura correta (segredo whsec_...), qualquer um poderia se "dar" premium
+    # chamando esta rota. Se a verificação falhar, nada é alterado.
     try:
         stripe.Webhook.construct_event(payload, assinatura, STRIPE_WEBHOOK_SECRET)
     except ValueError:
@@ -630,7 +640,7 @@ def webhook_stripe():
     except stripe.SignatureVerificationError:
         return jsonify({"erro": "Assinatura inválida"}), 400
 
-    evento = json.loads(payload)  
+    evento = json.loads(payload)  # payload já verificado
     tipo = evento.get('type')
     obj = evento.get('data', {}).get('object', {})
 
@@ -656,7 +666,7 @@ def webhook_stripe():
         cursor.close()
         conn.close()
 
-    
+    # Sempre 200 para eventos válidos (mesmo os que ignoramos), senão o Stripe reenvia.
     return jsonify({"recebido": True}), 200
 
 @app.route('/admin/usuarios', methods=['GET'])
