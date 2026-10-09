@@ -1,3 +1,6 @@
+Aqui está o seu código sem os comentários:
+
+```python
 import os
 import json
 import uuid
@@ -62,7 +65,7 @@ def garantir_bucket():
 try:
     garantir_bucket()
 except Exception as e:
-    print(f"Aviso: {e}")
+    print(f"Aviso: não foi possível preparar o bucket do MinIO no startup: {e}")
 
 def extensao_valida(nome_arquivo):
     return '.' in nome_arquivo and nome_arquivo.rsplit('.', 1)[1].lower() in EXTENSOES_PERMITIDAS
@@ -197,6 +200,8 @@ def index():
     api_key = os.getenv('TMDB_API_KEY')
     url_busca = f"https://api.themoviedb.org/3/search/person?query=Tom+Hanks&api_key={api_key}"
     search_res = requests.get(url_busca).json()
+
+    print("Retorno TMDB:", search_res)
 
     movies = []
     if 'results' in search_res and len(search_res['results']) > 0:
@@ -561,8 +566,6 @@ def premium_assinar():
     try:
         checkout = stripe.checkout.Session.create(
             mode='subscription',
-            payment_method_types=['card'],
-            billing_address_collection='never',
             line_items=[{'price': STRIPE_PRICE_ID, 'quantity': 1}],
             client_reference_id=str(session['user_id']),
             customer_email=email,
@@ -771,3 +774,5 @@ def reset_password():
             flash(erro, 'danger')
 
     return render_template('reset_password.html', token=token)
+
+```
