@@ -562,6 +562,15 @@ def premium_assinar():
         flash('Você já é Premium.', 'success')
         return redirect(url_for('perfil'))
 
+    if not (stripe.api_key or '').startswith('sk_test_'):
+        flash(
+            'O Stripe não está configurado em modo de teste. Configure STRIPE_SECRET_KEY '
+            'com uma chave sk_test_ e STRIPE_PRICE_ID com um preço criado no modo de teste '
+            'para usar o cartão 4242.',
+            'danger'
+        )
+        return redirect(url_for('perfil'))
+
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT email FROM usuarios WHERE id = %s", (session['user_id'],))
