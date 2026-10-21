@@ -9,6 +9,7 @@ A aplicação é dividida em microsserviços independentes, cada um em seu próp
 > Projeto acadêmico desenvolvido para a disciplina do professor [@siriani](https://github.com/siriani).
 
 **Ambiente publicado:** https://pedro-ferreira-isw055.lapps.studio
+## **Este projeto continua em:** https://github.com/PedroBarbosa42/Cotacoes-do-agro
 
 ## 📚 Documentação reversa
 
